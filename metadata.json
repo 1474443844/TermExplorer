@@ -1,0 +1,6 @@
+{
+  "name": "TermExplorer",
+  "description": "A feature-rich terminal emulator and file manager with interactive prompt, ANSI color rendering, history, file editing, and bookmarking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

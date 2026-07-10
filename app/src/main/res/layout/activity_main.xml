@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/drawer_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Main Content Area: Terminal & Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#0F1113">
+
+        <!-- Header Panel -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="#1A1C1E"
+            android:paddingHorizontal="16dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- Circular Terminal Icon Badge -->
+                <FrameLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@android:drawable/dialog_holo_dark_frame"
+                    android:layout_marginRight="12dp">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="⏵_"
+                        android:textColor="#381E72"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TermExplorer Pro"
+                        android:textColor="#E2E2E6"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ssh: local@localhost"
+                        android:textColor="#A8C7FA"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentRight="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_search"
+                    style="?android:attr/buttonStyleSmall"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="🔍"
+                    android:textColor="#C4C6CF"
+                    android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+                <!-- Menu Button to Toggle Sidebar -->
+                <Button
+                    android:id="@+id/btn_menu"
+                    style="?android:attr/buttonStyleSmall"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:text="☰"
+                    android:textColor="#C4C6CF"
+                    android:background="?android:attr/selectableItemBackgroundBorderless" />
+            </LinearLayout>
+        </RelativeLayout>
+
+        <!-- Divider Line -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#2D2F31" />
+
+        <!-- Fullscreen Terminal Panel -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000">
+
+            <!-- Custom Terminal Scrollable View -->
+            <com.example.ui.views.TerminalView
+                android:id="@+id/terminal_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Watermark Absolute Indicator -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|right"
+                android:layout_margin="12dp"
+                android:text="ANSI xterm-256color"
+                android:textColor="#2A2C2E"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Slide-Out Sidebar / Drawer containing Keys Toolbar and Local Storage -->
+    <LinearLayout
+        android:id="@+id/sidebar_drawer"
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="left"
+        android:background="#1A1C1E"
+        android:orientation="vertical"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp">
+
+        <!-- Drawer Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sidebar Controls"
+            android:textColor="#E2E2E6"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shortcut keys &amp; file explorer"
+            android:textColor="#8E9199"
+            android:textSize="12sp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Coreutils Setup Trigger Button -->
+        <Button
+            android:id="@+id/btn_coreutils_setup"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="⚙️ Replace Toybox (Coreutils)"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:backgroundTint="#381E72"
+            android:layout_marginBottom="12dp"
+            android:padding="0dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#2D2F31"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Section 1: Helper Shortcut Keys (Grid Layout inside sidebar) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⌨ Terminal Shortcuts"
+            android:textColor="#A8C7FA"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="3"
+            android:rowCount="2"
+            android:layout_marginBottom="20dp">
+
+            <Button
+                android:id="@+id/btn_key_esc"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="ESC"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btn_key_tab"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="TAB"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btn_key_ctrl"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="CTRL"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btn_key_alt"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="ALT"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btn_key_up"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="▲"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btn_key_clear"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="3dp"
+                android:text="CLR"
+                android:textColor="#C4C6CF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2D2F31"
+                android:padding="0dp" />
+        </GridLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#2D2F31"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Section 2: Local Storage File Explorer -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="8dp">
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:text="📁 File Explorer"
+                    android:textColor="#A8C7FA"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_items_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:text="0 items"
+                    android:textColor="#8E9199"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </RelativeLayout>
+
+            <!-- Quick Storage Switcher Tabs -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_go_sandbox"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_marginRight="4dp"
+                    android:text="📁 Sandbox"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#2D2F31"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_go_sdcard"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_marginLeft="4dp"
+                    android:text="💾 SD Card"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#2D2F31"
+                    android:padding="0dp" />
+            </LinearLayout>
+
+            <!-- Storage Capacity Info -->
+            <TextView
+                android:id="@+id/tv_storage_capacity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Capacity: Unknown"
+                android:textColor="#8E9199"
+                android:textSize="11sp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Current Working Directory Header Banner -->
+            <TextView
+                android:id="@+id/tv_cwd_banner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#2D2F31"
+                android:padding="8dp"
+                android:text="/files/workspace"
+                android:textColor="#E2E2E6"
+                android:textSize="10sp"
+                android:typeface="monospace"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Dynamic Search / Filter Box -->
+            <EditText
+                android:id="@+id/et_file_filter"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:hint="🔍 Filter files..."
+                android:textColor="#FFFFFF"
+                android:textColorHint="#8E9199"
+                android:textSize="11sp"
+                android:background="@android:drawable/edit_text"
+                android:padding="6dp"
+                android:singleLine="true"
+                android:layout_marginBottom="4dp" />
+        </LinearLayout>
+
+        <!-- Vertical scroll of files list -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:isScrollContainer="true">
+
+            <LinearLayout
+                android:id="@+id/container_file_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+
+        <!-- Action Quick Buttons at the very bottom of the drawer -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_new_file"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+ File"
+                android:textColor="#E2E2E6"
+                android:textSize="11sp"
+                android:backgroundTint="#2D2F31"
+                android:layout_marginRight="4dp"
+                android:padding="8dp" />
+
+            <Button
+                android:id="@+id/btn_new_folder"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="+ Folder"
+                android:textColor="#E2E2E6"
+                android:textSize="11sp"
+                android:backgroundTint="#2D2F31"
+                android:layout_marginLeft="4dp"
+                android:padding="8dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

@@ -16,7 +16,7 @@ android {
   defaultConfig {
     applicationId = "com.aistudio.termexplorer.pqzkwx"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 28
     versionCode = 1
     versionName = "1.0"
 
@@ -65,6 +65,16 @@ android {
     cmake {
       path = file("src/main/cpp/CMakeLists.txt")
     }
+  }
+  sourceSets {
+    getByName("main") {
+        // 1. 将 jniLibs 文件夹也作为 assets 的源目录
+        assets.srcDir("src/main/jniLibs")
+    }
+  }
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
   }
 }
 

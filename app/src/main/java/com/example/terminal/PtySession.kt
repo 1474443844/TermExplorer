@@ -1,14 +1,19 @@
 package com.example.terminal
 
+import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
 import kotlin.concurrent.thread
 
 class PtySession(
     private var workingDir: File,
-    private val filesDir: File,
+    private val context: Context,
     private val onOutput: (String) -> Unit
 ) {
+    private val filesDir: File = context.filesDir
+    private val nativeLibDir: File = File(context.applicationInfo.nativeLibraryDir)
+
     private var masterFd: Int = -1
     private var pid: Int = -1
     private var isRunning = false
@@ -27,6 +32,75 @@ class PtySession(
             
             // Check for custom Coreutils binary in PATH
             val binDir = File(filesDir, "bin")
+            if (!binDir.exists()) {
+                binDir.mkdirs()
+            }
+            
+            val bashFile = File(binDir, "bash")
+            var bashExtracted = false
+
+            // 1. Try to extract bash from assets first
+            val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+            val targetArchFolder = when {
+                primaryAbi.contains("64") && (primaryAbi.contains("arm") || primaryAbi.contains("aarch")) -> "arm64-v8a"
+                primaryAbi.contains("64") && primaryAbi.contains("x86") -> "x86_64"
+                primaryAbi.contains("x86") -> "x86"
+                else -> "arm64-v8a"
+            }
+
+            val possibleAssetPaths = listOf(
+                "$targetArchFolder/bash",
+                "bash"
+            )
+
+            if (!bashFile.exists() || bashFile.length() == 0L) {
+                for (path in possibleAssetPaths) {
+                    try {
+                        context.assets.open(path).use { input ->
+                            if (bashFile.exists()) {
+                                bashFile.delete()
+                            }
+                            bashFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                            bashFile.setExecutable(true, false)
+                            Log.i("PtySession", "Successfully extracted bash from assets path: $path")
+                            bashExtracted = true
+                        }
+                        if (bashExtracted) break
+                    } catch (e: Exception) {
+                        Log.e("PtySession", "Failed to extract bash from assets path: $path", e)
+                    }
+                }
+            } else {
+                bashExtracted = true
+                bashFile.setExecutable(true, false)
+            }
+
+            // 2. Fallback to extracting from nativeLibDir if assets extraction wasn't completed
+            if (!bashExtracted) {
+                val builtInBash = listOf(
+                    File(nativeLibDir, "bash"),
+                    File(nativeLibDir, "libbash.so")
+                ).firstOrNull { it.exists() }
+
+                if (builtInBash != null && builtInBash.exists()) {
+                    if (!bashFile.exists() || bashFile.length() != builtInBash.length()) {
+                        try {
+                            builtInBash.inputStream().use { input ->
+                                bashFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            bashFile.setExecutable(true, false)
+                            Log.i("PtySession", "Successfully copied built-in bash to filesDir/bin/bash and made executable")
+                        } catch (e: Exception) {
+                            Log.e("PtySession", "Failed to copy built-in bash to filesDir/bin/bash", e)
+                        }
+                    }
+                }
+            }
+
             if (binDir.exists() && File(binDir, "coreutils").exists()) {
                 envList.add("PATH=${binDir.absolutePath}:/system/bin:/system/xbin:/vendor/bin:/sbin")
             } else {
@@ -35,32 +109,75 @@ class PtySession(
             
             envList.add("HOME=${workingDir.absolutePath}")
             envList.add("PWD=${workingDir.absolutePath}")
+            envList.add("TERM_BIN=${binDir.absolutePath}")
+
+            // Explicitly configure readline (.inputrc) for horizontal wrapping
+            val inputrcFile = File(workingDir, ".inputrc")
+            try {
+                val inputrcContent = """
+                    set horizontal-scroll-mode off
+                """.trimIndent()
+                inputrcFile.writeText(inputrcContent + "\n")
+            } catch (e: Exception) {
+                Log.e("PtySession", "Failed to write .inputrc", e)
+            }
+            envList.add("INPUTRC=${inputrcFile.absolutePath}")
 
             val parentDir = workingDir.parentFile ?: workingDir
             val initFile = File(parentDir, ".shinit")
             try {
-                val script = "cwd_prompt() {\n" +
-                        "    cwd=\$(pwd)\n" +
-                        "    if [ \"\$cwd\" = \"\$HOME\" ]; then\n" +
-                        "        name=\"~\"\n" +
-                        "    else\n" +
-                        "        name=\"\${cwd##*/}\"\n" +
-                        "        if [ -z \"\$name\" ]; then\n" +
-                        "            name=\"/\"\n" +
-                        "        fi\n" +
-                        "    fi\n" +
-                        "    if [ -n \"\$BASH_VERSION\" ]; then\n" +
-                        "        printf \"\\001\\033[32m\\002%s\\001\\033[0m\\002\" \"\$name\"\n" +
-                        "    else\n" +
-                        "        printf \"\\001\\033[32m\\001%s\\001\\033[0m\\001\" \"\$name\"\n" +
-                        "    fi\n" +
-                        "}\n" +
-                        "PS1='\$(cwd_prompt) \$ '\n" +
-                        "alias ls='ls --color=auto'\n" +
-                        "alias ll='ls -l --color=auto'\n" +
-                        "alias grep='grep --color=auto'\n" +
-                        "alias egrep='egrep --color=auto'\n" +
-                        "alias fgrep='fgrep --color=auto'\n"
+                val script = """
+                    export TERM_BIN="${binDir.absolutePath}"
+                    # Pre-evaluate the literal escape character to avoid backslash prompt bugs in different shells
+                    ESC=${'$'}(printf "\033")
+                    
+                    if [ -n "${'$'}BASH_VERSION" ]; then
+                        PS1="\[${'$'}{ESC}[32m\]\W\[${'$'}{ESC}[0m\] \${'$'} "
+                    else
+                        # Enable command-line editing and history navigation (arrow keys) in default system mksh shell
+                        set -o emacs
+                        cwd_prompt() {
+                            cwd=${'$'}(pwd)
+                            if [ "${'$'}cwd" = "${'$'}HOME" ]; then
+                                name="~"
+                            else
+                                name="${'$'}{cwd##*/}"
+                                if [ -z "${'$'}name" ]; then
+                                    name="/"
+                               fi
+                            fi
+                            printf "%s" "${'$'}name"
+                        }
+                        PS1="${'$'}{ESC}[32m\$(cwd_prompt)${'$'}{ESC}[0m \${'$'} "
+                    fi
+                    
+                    fix-shebang() {
+                        if [ -z "${'$'}1" ]; then
+                            echo "Usage: fix-shebang <script_file>"
+                            return 1
+                        fi
+                        if [ ! -f "${'$'}1" ]; then
+                            echo "Error: File '${'$'}1' does not exist."
+                            return 1
+                        fi
+                        # Replace standard shebangs with our custom local paths
+                        sed -i "s|^#!/usr/bin/env bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
+                        sed -i "s|^#!/usr/bin/env sh|#!/system/bin/sh|" "${'$'}1"
+                        sed -i "s|^#!/bin/bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
+                        sed -i "s|^#!/bin/sh|#!/system/bin/sh|" "${'$'}1"
+                        echo "Shebang updated for ${'$'}1"
+                    }
+                    
+                    alias ls='ls --color=auto'
+                    alias ll='ls -l --color=auto'
+                    alias grep='grep --color=auto'
+                    alias egrep='egrep --color=auto'
+                    alias fgrep='fgrep --color=auto'
+                    
+                    if [ -f "${'$'}{HOME}/.bashrc" ]; then
+                        . "${'$'}{HOME}/.bashrc"
+                    fi
+                """.trimIndent()
                 initFile.writeText(script)
             } catch (e: Exception) {
                 Log.e("PtySession", "Failed to write .shinit", e)
@@ -68,6 +185,9 @@ class PtySession(
             envList.add("ENV=${initFile.absolutePath}")
 
             val shellCandidates = listOf(
+                File(binDir, "bash").absolutePath,
+                File(nativeLibDir, "bash").absolutePath,
+                File(nativeLibDir, "libbash.so").absolutePath,
                 "/system/bin/bash",
                 "/system/xbin/bash",
                 "/vendor/bin/bash",
@@ -76,7 +196,7 @@ class PtySession(
             )
             val shellPath = shellCandidates.firstOrNull { File(it).exists() } ?: "/system/bin/sh"
 
-            val args = if (shellPath.endsWith("bash")) {
+            val args = if (shellPath.endsWith("bash") || shellPath.endsWith("libbash.so")) {
                 arrayOf("--rcfile", initFile.absolutePath, "-i")
             } else {
                 arrayOf("-i")

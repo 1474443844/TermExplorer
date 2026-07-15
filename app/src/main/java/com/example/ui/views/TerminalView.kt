@@ -12,16 +12,23 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
+import android.widget.PopupWindow
+import android.widget.Toast
+import android.widget.LinearLayout
+import android.content.ClipboardManager
+import android.content.ClipData
 import com.example.terminal.AnsiParser
 
 class TerminalView @JvmOverloads constructor(
@@ -39,8 +46,22 @@ class TerminalView @JvmOverloads constructor(
         val fgColor: Int,
         val bgColor: Int,
         val isBold: Boolean,
-        val isUnderline: Boolean
+        val isUnderline: Boolean,
+        val isFullWidth: Boolean = false,
+        val isPlaceholder: Boolean = false
     )
+
+    private fun isFullWidth(c: Char): Boolean {
+        val code = c.code
+        return (code in 0x4E00..0x9FFF) ||
+               (code in 0x3400..0x4DBF) ||
+               (code in 0x20000..0x2A6DF) ||
+               (code in 0x3000..0x303F) ||
+               (code in 0xFF00..0xFFEF) ||
+               (code in 0x3040..0x309F) ||
+               (code in 0x30A0..0x30FF) ||
+               (code in 0xAC00..0xD7AF)
+    }
 
     private val defaultFg = Color.parseColor("#E2E2E6")
     private val defaultBg = Color.parseColor("#000000")
@@ -53,6 +74,11 @@ class TerminalView @JvmOverloads constructor(
     private val lines = ArrayList<VisualLine>()
     private var cursorRow = 0
     private var cursorCol = 0
+
+    var isCtrlActive = false
+    var isAltActive = false
+    var isShiftActive = false
+    var onModifiersChangedListener: (() -> Unit)? = null
 
     private var currentCols = 80
     private var currentRows = 24
@@ -68,6 +94,49 @@ class TerminalView @JvmOverloads constructor(
     }
     private val cursorPaint = Paint().apply {
         style = Paint.Style.FILL
+    }
+    private val selectionPaint = Paint().apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#4285F4")
+        alpha = 100
+    }
+    private val handlePaint = Paint().apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#4285F4")
+        isAntiAlias = true
+    }
+
+    private fun dpToPx(dp: Float): Float {
+        return dp * resources.displayMetrics.density
+    }
+
+    data class TerminalPosition(val row: Int, val col: Int) : Comparable<TerminalPosition> {
+        override fun compareTo(other: TerminalPosition): Int {
+            return if (row != other.row) {
+                row.compareTo(other.row)
+            } else {
+                col.compareTo(other.col)
+            }
+        }
+    }
+
+    private var selectionStart: TerminalPosition? = null
+    private var selectionEnd: TerminalPosition? = null
+    private var isSelecting = false
+    private var isDraggingStartHandle = false
+    private var isDraggingEndHandle = false
+    private var selectionPopup: PopupWindow? = null
+
+    private val longPressRunnable = Runnable {
+        val startPos = getPositionForOffset(startX, startY)
+        if (startPos != null) {
+            isSelecting = true
+            selectionStart = startPos
+            selectionEnd = startPos
+            isDraggingEndHandle = true
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            invalidate()
+        }
     }
 
     private var charWidth: Float = 0f
@@ -174,23 +243,55 @@ class TerminalView @JvmOverloads constructor(
         for (lIdx in 0 until logicalLines.size) {
             val logical = logicalLines[lIdx]
             
-            if (lIdx == cursorLogicalRow) {
-                val beforeLines = cursorLogicalCol / newCols
-                newCursorRow = newLines.size + beforeLines
-                newCursorCol = cursorLogicalCol % newCols
-            }
-            
             if (logical.isEmpty()) {
+                if (lIdx == cursorLogicalRow) {
+                    newCursorRow = newLines.size
+                    newCursorCol = 0
+                }
                 newLines.add(VisualLine())
             } else {
                 var offset = 0
                 while (offset < logical.size) {
-                    val chunkSize = (logical.size - offset).coerceAtMost(newCols)
                     val visualLine = VisualLine()
-                    for (j in 0 until chunkSize) {
-                        visualLine.chars.add(logical[offset + j])
+                    var colCount = 0
+                    
+                    while (colCount < newCols && offset < logical.size) {
+                        if (lIdx == cursorLogicalRow && offset == cursorLogicalCol) {
+                            newCursorRow = newLines.size
+                            newCursorCol = colCount
+                        }
+                        
+                        val sc = logical[offset]
+                        if (sc.isFullWidth) {
+                            if (colCount + 2 > newCols) {
+                                break // Wrap to next visual line
+                            }
+                            visualLine.chars.add(sc)
+                            colCount++
+                            offset++
+                            
+                            if (lIdx == cursorLogicalRow && offset == cursorLogicalCol) {
+                                newCursorRow = newLines.size
+                                newCursorCol = colCount
+                            }
+                            
+                            if (offset < logical.size && logical[offset].isPlaceholder) {
+                                visualLine.chars.add(logical[offset])
+                                colCount++
+                                offset++
+                            }
+                        } else {
+                            visualLine.chars.add(sc)
+                            colCount++
+                            offset++
+                        }
                     }
-                    offset += chunkSize
+                    
+                    if (lIdx == cursorLogicalRow && offset == cursorLogicalCol && offset == logical.size) {
+                        newCursorRow = newLines.size
+                        newCursorCol = colCount
+                    }
+                    
                     if (offset < logical.size) {
                         visualLine.isSoftWrapped = true
                     }
@@ -259,8 +360,41 @@ class TerminalView @JvmOverloads constructor(
                 val sc = line[colIdx]
                 val screenX = paddingLeft + colIdx * charWidth
 
-                // Draw non-default background if exists
-                if (sc.bgColor != defaultBg) {
+                // Determine if selected
+                var isCharSelected = false
+                val selStart = selectionStart
+                val selEnd = selectionEnd
+                if (selStart != null && selEnd != null) {
+                    val maxRow = lines.size - 1
+                    if (maxRow >= 0) {
+                        val startRowCoerced = selStart.row.coerceIn(0, maxRow)
+                        val startColCoerced = selStart.col.coerceIn(0, lines[startRowCoerced].chars.size)
+                        val endRowCoerced = selEnd.row.coerceIn(0, maxRow)
+                        val endColCoerced = selEnd.col.coerceIn(0, lines[endRowCoerced].chars.size)
+                        
+                        val sPos = TerminalPosition(startRowCoerced, startColCoerced)
+                        val ePos = TerminalPosition(endRowCoerced, endColCoerced)
+                        
+                        val minPos = if (sPos < ePos) sPos else ePos
+                        val maxPos = if (sPos < ePos) ePos else sPos
+                        
+                        val currentPos = TerminalPosition(lineIdx, colIdx)
+                        if (currentPos >= minPos && currentPos <= maxPos) {
+                            isCharSelected = true
+                        }
+                    }
+                }
+
+                // Draw non-default background or selection highlight if exists
+                if (isCharSelected) {
+                    canvas.drawRect(
+                        screenX,
+                        screenY.toFloat(),
+                        screenX + charWidth,
+                        (screenY + charHeight).toFloat(),
+                        selectionPaint
+                    )
+                } else if (sc.bgColor != defaultBg) {
                     bgPaint.color = sc.bgColor
                     canvas.drawRect(
                         screenX,
@@ -272,22 +406,30 @@ class TerminalView @JvmOverloads constructor(
                 }
 
                 // Draw character
-                textPaint.color = sc.fgColor
-                textPaint.isFakeBoldText = sc.isBold
-                textPaint.isUnderlineText = sc.isUnderline
-                canvas.drawText(
-                    charArrayOf(sc.char),
-                    0,
-                    1,
-                    screenX,
-                    (screenY + textBaseline).toFloat(),
-                    textPaint
-                )
+                if (!sc.isPlaceholder) {
+                    textPaint.color = sc.fgColor
+                    textPaint.isFakeBoldText = sc.isBold
+                    textPaint.isUnderlineText = sc.isUnderline
+                    canvas.drawText(
+                        charArrayOf(sc.char),
+                        0,
+                        1,
+                        screenX,
+                        (screenY + textBaseline).toFloat(),
+                        textPaint
+                    )
+                }
             }
         }
 
         // Draw cursor
         if (cursorVisible && cursorRow >= startLine && cursorRow < endLine) {
+            val isCursorFullWidth = if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {
+                lines[cursorRow].chars[cursorCol].isFullWidth
+            } else {
+                false
+            }
+            val cursorWidth = if (isCursorFullWidth) 2 * charWidth else charWidth
             val screenX = paddingLeft + cursorCol * charWidth
             val screenY = paddingTop + (cursorRow - startLine) * charHeight
 
@@ -296,7 +438,7 @@ class TerminalView @JvmOverloads constructor(
             canvas.drawRect(
                 screenX,
                 screenY.toFloat(),
-                screenX + charWidth,
+                screenX + cursorWidth,
                 (screenY + charHeight).toFloat(),
                 cursorPaint
             )
@@ -304,17 +446,71 @@ class TerminalView @JvmOverloads constructor(
             // Draw inverse text under cursor if any
             if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {
                 val sc = lines[cursorRow].chars[cursorCol]
-                textPaint.color = Color.parseColor("#000000")
-                textPaint.isFakeBoldText = sc.isBold
-                textPaint.isUnderlineText = sc.isUnderline
-                canvas.drawText(
-                    charArrayOf(sc.char),
-                    0,
-                    1,
-                    screenX,
-                    (screenY + textBaseline).toFloat(),
-                    textPaint
-                )
+                if (!sc.isPlaceholder) {
+                    textPaint.color = Color.parseColor("#000000")
+                    textPaint.isFakeBoldText = sc.isBold
+                    textPaint.isUnderlineText = sc.isUnderline
+                    canvas.drawText(
+                        charArrayOf(sc.char),
+                        0,
+                        1,
+                        screenX,
+                        (screenY + textBaseline).toFloat(),
+                        textPaint
+                    )
+                }
+            }
+        }
+
+        // Draw selection handles
+        val selStart = selectionStart
+        val selEnd = selectionEnd
+        if (isSelecting && selStart != null && selEnd != null) {
+            val r = dpToPx(12f)
+            
+            val minPos = if (selStart < selEnd) selStart else selEnd
+            val maxPos = if (selStart < selEnd) selEnd else selStart
+            
+            // Draw Left Handle (Tip pointing to top-right)
+            if (minPos.row >= startLine && minPos.row < endLine) {
+                val leftTipX = paddingLeft + minPos.col * charWidth
+                val leftTipY = (paddingTop + (minPos.row - startLine + 1) * charHeight).toFloat()
+                
+                val cx = leftTipX - r
+                val cy = leftTipY + r
+                
+                // Draw circle
+                canvas.drawCircle(cx, cy, r, handlePaint)
+                
+                // Draw triangle connecting the tip at (leftTipX, leftTipY) to the circle
+                val path = android.graphics.Path().apply {
+                    moveTo(leftTipX, leftTipY)
+                    lineTo(leftTipX - r, leftTipY)
+                    lineTo(leftTipX, leftTipY + r)
+                    close()
+                }
+                canvas.drawPath(path, handlePaint)
+            }
+            
+            // Draw Right Handle (Tip pointing to top-left)
+            if (maxPos.row >= startLine && maxPos.row < endLine) {
+                val rightTipX = paddingLeft + (maxPos.col + 1) * charWidth
+                val rightTipY = (paddingTop + (maxPos.row - startLine + 1) * charHeight).toFloat()
+                
+                val cx = rightTipX + r
+                val cy = rightTipY + r
+                
+                // Draw circle
+                canvas.drawCircle(cx, cy, r, handlePaint)
+                
+                // Draw triangle connecting the tip at (rightTipX, rightTipY) to the circle
+                val path = android.graphics.Path().apply {
+                    moveTo(rightTipX, rightTipY)
+                    lineTo(rightTipX + r, rightTipY)
+                    lineTo(rightTipX, rightTipY + r)
+                    close()
+                }
+                canvas.drawPath(path, handlePaint)
             }
         }
     }
@@ -328,6 +524,7 @@ class TerminalView @JvmOverloads constructor(
         scaleDetector.onTouchEvent(event)
 
         if (scaleDetector.isInProgress || event.pointerCount > 1) {
+            removeCallbacks(longPressRunnable)
             lastTouchY = event.y
             return true
         }
@@ -338,27 +535,154 @@ class TerminalView @JvmOverloads constructor(
                 startX = event.x
                 startY = event.y
                 scrollAccumulator = 0f
+                
+                // Check if we touched a handle
+                isDraggingStartHandle = false
+                isDraggingEndHandle = false
+                
+                val sStart = selectionStart
+                val sEnd = selectionEnd
+                if (isSelecting && sStart != null && sEnd != null) {
+                    val r = dpToPx(12f)
+                    val hitRadius = dpToPx(36f) // generous hit box for fingers
+                    
+                    val minPos = if (sStart < sEnd) sStart else sEnd
+                    val maxPos = if (sStart < sEnd) sEnd else sStart
+                    
+                    val leftTipX = paddingLeft + minPos.col * charWidth
+                    val leftTipY = paddingTop + (minPos.row - firstVisibleLine + 1) * charHeight
+                    val leftCx = leftTipX - r
+                    val leftCy = leftTipY + r
+                    
+                    val rightTipX = paddingLeft + (maxPos.col + 1) * charWidth
+                    val rightTipY = paddingTop + (maxPos.row - firstVisibleLine + 1) * charHeight
+                    val rightCx = rightTipX + r
+                    val rightCy = rightTipY + r
+                    
+                    val distLeft = Math.hypot((event.x - leftCx).toDouble(), (event.y - leftCy).toDouble())
+                    val distRight = Math.hypot((event.x - rightCx).toDouble(), (event.y - rightCy).toDouble())
+                    
+                    if (distLeft < hitRadius && distLeft < distRight) {
+                        if (sStart < sEnd) {
+                            isDraggingStartHandle = true
+                        } else {
+                            isDraggingEndHandle = true
+                        }
+                        dismissSelectionMenu()
+                        return true
+                    } else if (distRight < hitRadius) {
+                        if (sStart < sEnd) {
+                            isDraggingEndHandle = true
+                        } else {
+                            isDraggingStartHandle = true
+                        }
+                        dismissSelectionMenu()
+                        return true
+                    }
+                }
+                
+                removeCallbacks(longPressRunnable)
+                postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout().toLong())
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val deltaY = event.y - lastTouchY
-                lastTouchY = event.y
-
-                scrollAccumulator += deltaY
-                val linesToScroll = (scrollAccumulator / charHeight).toInt()
-                if (linesToScroll != 0) {
-                    scrollLines(-linesToScroll)
-                    scrollAccumulator -= linesToScroll * charHeight
-                }
-                return true
-            }
-            MotionEvent.ACTION_UP -> {
                 val dx = Math.abs(event.x - startX)
                 val dy = Math.abs(event.y - startY)
                 val slop = ViewConfiguration.get(context).scaledTouchSlop
-                if (dx < slop && dy < slop) {
-                    focusTerminal()
-                    performClick()
+
+                if (dx > slop || dy > slop) {
+                    removeCallbacks(longPressRunnable)
+                }
+
+                if (isDraggingStartHandle || isDraggingEndHandle) {
+                    val currentPos = getPositionForOffset(event.x, event.y)
+                    if (currentPos != null) {
+                        if (isDraggingStartHandle) {
+                            selectionStart = currentPos
+                        } else {
+                            selectionEnd = currentPos
+                        }
+                        invalidate()
+                    }
+                    
+                    val dragY = event.y
+                    if (dragY < paddingTop + charHeight) {
+                        scrollLines(-1)
+                    } else if (dragY > height - paddingBottom - charHeight) {
+                        scrollLines(1)
+                    }
+                    return true
+                }
+
+                if (isSelecting) {
+                    val deltaY = event.y - lastTouchY
+                    lastTouchY = event.y
+
+                    scrollAccumulator += deltaY
+                    val linesToScroll = (scrollAccumulator / charHeight).toInt()
+                    if (linesToScroll != 0) {
+                        scrollLines(-linesToScroll)
+                        scrollAccumulator -= linesToScroll * charHeight
+                    }
+                } else {
+                    val deltaY = event.y - lastTouchY
+                    lastTouchY = event.y
+
+                    scrollAccumulator += deltaY
+                    val linesToScroll = (scrollAccumulator / charHeight).toInt()
+                    if (linesToScroll != 0) {
+                        scrollLines(-linesToScroll)
+                        scrollAccumulator -= linesToScroll * charHeight
+                    }
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(longPressRunnable)
+                
+                if (isDraggingStartHandle || isDraggingEndHandle) {
+                    isDraggingStartHandle = false
+                    isDraggingEndHandle = false
+                    showSelectionMenu(event.x, event.y)
+                    return true
+                }
+                
+                val dx = Math.abs(event.x - startX)
+                val dy = Math.abs(event.y - startY)
+                val slop = ViewConfiguration.get(context).scaledTouchSlop
+                val isClick = dx < slop && dy < slop
+
+                if (isSelecting) {
+                    if (isClick) {
+                        val clickPos = getPositionForOffset(event.x, event.y)
+                        val sStart = selectionStart
+                        val sEnd = selectionEnd
+                        if (clickPos != null && sStart != null && sEnd != null) {
+                            val minPos = if (sStart < sEnd) sStart else sEnd
+                            val maxPos = if (sStart < sEnd) sEnd else sStart
+                            
+                            if (clickPos >= minPos && clickPos <= maxPos) {
+                                showSelectionMenu(event.x, event.y)
+                            } else {
+                                clearSelection()
+                                dismissSelectionMenu()
+                                focusTerminal()
+                                performClick()
+                            }
+                        } else {
+                            clearSelection()
+                            dismissSelectionMenu()
+                            focusTerminal()
+                            performClick()
+                        }
+                    }
+                } else {
+                    if (isClick) {
+                        clearSelection()
+                        dismissSelectionMenu()
+                        focusTerminal()
+                        performClick()
+                    }
                 }
                 return true
             }
@@ -386,6 +710,11 @@ class TerminalView @JvmOverloads constructor(
         imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
 
+    fun hideKeyboard() {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(windowToken, 0)
+    }
+
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
@@ -397,6 +726,27 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (isCtrlActive && keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
+            val charIndex = keyCode - KeyEvent.KEYCODE_A
+            val controlCode = charIndex + 1
+            onInputListener?.invoke(controlCode.toChar().toString())
+            isCtrlActive = false
+            onModifiersChangedListener?.invoke()
+            return true
+        } else if (isAltActive && keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
+            val char = ('a'.code + (keyCode - KeyEvent.KEYCODE_A)).toChar()
+            onInputListener?.invoke("\u001B" + char)
+            isAltActive = false
+            onModifiersChangedListener?.invoke()
+            return true
+        } else if (isShiftActive && keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
+            val char = ('A'.code + (keyCode - KeyEvent.KEYCODE_A)).toChar()
+            onInputListener?.invoke(char.toString())
+            isShiftActive = false
+            onModifiersChangedListener?.invoke()
+            return true
+        }
+
         if (event.isCtrlPressed) {
             val char = event.getUnicodeChar(0).toChar().lowercaseChar()
             if (char == 'c') {
@@ -474,13 +824,25 @@ class TerminalView @JvmOverloads constructor(
                 } else if (c == '\b' || c == '\u007F') {
                     if (cursorCol > 0) {
                         cursorCol--
+                        // If we just backed into a placeholder, go back one more to point to the actual character
+                        if (cursorRow < lines.size) {
+                            val line = lines[cursorRow].chars
+                            if (cursorCol < line.size && line[cursorCol].isPlaceholder) {
+                                if (cursorCol > 0) {
+                                    cursorCol--
+                                }
+                            }
+                        }
                     }
                 } else if (c.code < 32 && c != '\t') {
                     // Ignore other control characters (e.g. \u0001, \u0002) to prevent rendering artifacts
                     continue
                 } else {
+                    val isFull = isFullWidth(c)
+                    val charCols = if (isFull) 2 else 1
+
                     // Auto-wrap: if we reach or exceed the column limit of the terminal view
-                    if (cursorCol >= currentCols) {
+                    if (cursorCol + charCols > currentCols) {
                         if (cursorRow < lines.size) {
                             lines[cursorRow].isSoftWrapped = true
                         }
@@ -509,13 +871,23 @@ class TerminalView @JvmOverloads constructor(
                         line.add(StyledChar(' ', defaultFg, defaultBg, false, false))
                     }
 
-                    val styledChar = StyledChar(c, fg, bg, isBold, isUnderline)
+                    val styledChar = StyledChar(c, fg, bg, isBold, isUnderline, isFullWidth = isFull, isPlaceholder = false)
                     if (cursorCol < line.size) {
                         line[cursorCol] = styledChar
                     } else {
                         line.add(styledChar)
                     }
                     cursorCol++
+
+                    if (isFull) {
+                        val placeholderChar = StyledChar(' ', fg, bg, isBold, isUnderline, isFullWidth = false, isPlaceholder = true)
+                        if (cursorCol < line.size) {
+                            line[cursorCol] = placeholderChar
+                        } else {
+                            line.add(placeholderChar)
+                        }
+                        cursorCol++
+                    }
                 }
             }
 
@@ -538,6 +910,8 @@ class TerminalView @JvmOverloads constructor(
 
     fun clearOutput() {
         post {
+            clearSelection()
+            dismissSelectionMenu()
             lines.clear()
             lines.add(VisualLine())
             cursorRow = 0
@@ -545,6 +919,220 @@ class TerminalView @JvmOverloads constructor(
             firstVisibleLine = 0
             invalidate()
         }
+    }
+
+    private fun getPositionForOffset(x: Float, y: Float): TerminalPosition? {
+        if (charHeight <= 0 || charWidth <= 0f || lines.isEmpty()) return null
+        val startLine = firstVisibleLine
+        
+        val relativeY = y - paddingTop
+        val relativeX = x - paddingLeft
+        
+        val lineOffset = (relativeY / charHeight).toInt()
+        val row = (startLine + lineOffset).coerceIn(0, lines.size - 1)
+        
+        val line = lines[row].chars
+        val col = (relativeX / charWidth).toInt().coerceIn(0, line.size)
+        return TerminalPosition(row, col)
+    }
+
+    fun getSelectedText(): String {
+        val selStart = selectionStart
+        val selEnd = selectionEnd
+        if (selStart == null || selEnd == null || lines.isEmpty()) return ""
+        
+        val maxRow = lines.size - 1
+        val startRowCoerced = selStart.row.coerceIn(0, maxRow)
+        val startColCoerced = selStart.col.coerceIn(0, lines[startRowCoerced].chars.size)
+        val endRowCoerced = selEnd.row.coerceIn(0, maxRow)
+        val endColCoerced = selEnd.col.coerceIn(0, lines[endRowCoerced].chars.size)
+        
+        val sPos = TerminalPosition(startRowCoerced, startColCoerced)
+        val ePos = TerminalPosition(endRowCoerced, endColCoerced)
+        
+        val minPos = if (sPos < ePos) sPos else ePos
+        val maxPos = if (sPos < ePos) ePos else sPos
+        
+        val sb = StringBuilder()
+        for (r in minPos.row..maxPos.row) {
+            if (r >= lines.size) break
+            val line = lines[r]
+            val startCol = if (r == minPos.row) minPos.col else 0
+            val endCol = if (r == maxPos.row) maxPos.col.coerceAtMost(line.chars.size - 1) else line.chars.size - 1
+            
+            for (c in startCol..endCol) {
+                if (c >= 0 && c < line.chars.size) {
+                    val sc = line.chars[c]
+                    if (!sc.isPlaceholder) {
+                        sb.append(sc.char)
+                    }
+                }
+            }
+            if (r < maxPos.row && !line.isSoftWrapped) {
+                sb.append("\n")
+            }
+        }
+        return sb.toString()
+    }
+
+    fun copySelectedText() {
+        val text = getSelectedText()
+        if (text.isNotEmpty()) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val clip = ClipData.newPlainText("Terminal Text", text)
+            clipboard?.setPrimaryClip(clip)
+            Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+        }
+        clearSelection()
+    }
+
+    fun pasteFromClipboard() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = clipboard?.primaryClip
+        if (clip != null && clip.itemCount > 0) {
+            val text = clip.getItemAt(0).text?.toString()
+            if (!text.isNullOrEmpty()) {
+                onInputListener?.invoke(text)
+            }
+        }
+    }
+
+    private fun selectAllText() {
+        if (lines.isNotEmpty()) {
+            selectionStart = TerminalPosition(0, 0)
+            val lastRow = lines.size - 1
+            val lastCol = (lines[lastRow].chars.size - 1).coerceAtLeast(0)
+            selectionEnd = TerminalPosition(lastRow, lastCol)
+            isSelecting = true
+            invalidate()
+        }
+    }
+
+    fun clearSelection() {
+        selectionStart = null
+        selectionEnd = null
+        isSelecting = false
+        invalidate()
+    }
+
+    private fun showSelectionMenu(x: Float, y: Float) {
+        dismissSelectionMenu()
+        
+        val ctx = context
+        val menuLayout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(8, 8, 8, 8)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#25282C"))
+                cornerRadius = 24f
+                setStroke(2, Color.parseColor("#3D4146"))
+            }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val hasClipboardText = clipboard?.hasPrimaryClip() == true && 
+                !clipboard.primaryClip?.getItemAt(0)?.text.isNullOrEmpty()
+
+        val hasSelection = selectionStart != null && selectionEnd != null && selectionStart != selectionEnd
+        if (hasSelection) {
+            val copyButton = TextView(ctx).apply {
+                text = " 复制 "
+                setTextColor(Color.parseColor("#E2E2E6"))
+                textSize = 14f
+                setTypeface(null, Typeface.BOLD)
+                setPadding(24, 16, 24, 16)
+                isClickable = true
+                isFocusable = false
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 16f
+                }
+                setOnClickListener {
+                    copySelectedText()
+                    dismissSelectionMenu()
+                }
+            }
+            menuLayout.addView(copyButton)
+        }
+
+        if (hasClipboardText) {
+            val pasteButton = TextView(ctx).apply {
+                text = " 粘贴 "
+                setTextColor(Color.parseColor("#E2E2E6"))
+                textSize = 14f
+                setTypeface(null, Typeface.BOLD)
+                setPadding(24, 16, 24, 16)
+                isClickable = true
+                isFocusable = false
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = 16f
+                }
+                setOnClickListener {
+                    pasteFromClipboard()
+                    dismissSelectionMenu()
+                    clearSelection()
+                }
+            }
+            menuLayout.addView(pasteButton)
+        }
+
+        val selectAllButton = TextView(ctx).apply {
+            text = " 全选 "
+            setTextColor(Color.parseColor("#A8C7FA"))
+            textSize = 14f
+            setPadding(24, 16, 24, 16)
+            isClickable = true
+            isFocusable = false
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 16f
+            }
+            setOnClickListener {
+                selectAllText()
+                dismissSelectionMenu()
+                showSelectionMenu(width / 2f, height / 3f)
+            }
+        }
+        menuLayout.addView(selectAllButton)
+
+        val cancelButton = TextView(ctx).apply {
+            text = " 取消 "
+            setTextColor(Color.parseColor("#8E9199"))
+            textSize = 14f
+            setPadding(24, 16, 24, 16)
+            isClickable = true
+            isFocusable = false
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 16f
+            }
+            setOnClickListener {
+                clearSelection()
+                dismissSelectionMenu()
+            }
+        }
+        menuLayout.addView(cancelButton)
+
+        selectionPopup = PopupWindow(
+            menuLayout,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            false
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = false
+            elevation = 20f
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            
+            val location = IntArray(2)
+            getLocationOnScreen(location)
+            val popupX = location[0] + x.toInt() - 200
+            val popupY = location[1] + y.toInt() - 150
+            showAtLocation(this@TerminalView, Gravity.NO_GRAVITY, popupX.coerceAtLeast(10), popupY.coerceAtLeast(10))
+        }
+    }
+
+    private fun dismissSelectionMenu() {
+        selectionPopup?.dismiss()
+        selectionPopup = null
     }
 
     fun getTextView(): TextView = TextView(context)
@@ -561,14 +1149,34 @@ class TerminalView @JvmOverloads constructor(
 }
 
 class TerminalInputConnection(
-    targetView: View,
+    private val terminalView: TerminalView,
     fullEditor: Boolean,
     private val onInput: (String) -> Unit
-) : BaseInputConnection(targetView, fullEditor) {
+) : BaseInputConnection(terminalView, fullEditor) {
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         text?.let {
-            onInput(it.toString())
+            var finalStr = it.toString()
+            if (terminalView.isCtrlActive) {
+                if (finalStr.length == 1) {
+                    val c = finalStr[0]
+                    if (c in 'a'..'z' || c in 'A'..'Z') {
+                        val controlCode = c.lowercaseChar().code - 'a'.code + 1
+                        finalStr = controlCode.toChar().toString()
+                    }
+                }
+                terminalView.isCtrlActive = false
+                terminalView.onModifiersChangedListener?.invoke()
+            } else if (terminalView.isAltActive) {
+                finalStr = "\u001B" + finalStr
+                terminalView.isAltActive = false
+                terminalView.onModifiersChangedListener?.invoke()
+            } else if (terminalView.isShiftActive) {
+                finalStr = finalStr.uppercase()
+                terminalView.isShiftActive = false
+                terminalView.onModifiersChangedListener?.invoke()
+            }
+            onInput(finalStr)
         }
         return true
     }

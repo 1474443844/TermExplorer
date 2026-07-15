@@ -4,106 +4,26 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Main Content Area: Terminal & Header -->
-    <LinearLayout
+    <!-- Main Content Area: Switchable Screens -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="#0F1113">
+        android:layout_height="match_parent">
 
-        <!-- Header Panel -->
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:background="#1A1C1E"
-            android:paddingHorizontal="16dp">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentLeft="true"
-                android:layout_centerVertical="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <!-- Circular Terminal Icon Badge -->
-                <FrameLayout
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@android:drawable/dialog_holo_dark_frame"
-                    android:layout_marginRight="12dp">
-                    
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:text="⏵_"
-                        android:textColor="#381E72"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-                </FrameLayout>
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="TermExplorer Pro"
-                        android:textColor="#E2E2E6"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="ssh: local@localhost"
-                        android:textColor="#A8C7FA"
-                        android:textSize="10sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_alignParentRight="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btn_search"
-                    style="?android:attr/buttonStyleSmall"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="🔍"
-                    android:textColor="#C4C6CF"
-                    android:background="?android:attr/selectableItemBackgroundBorderless" />
-
-                <!-- Menu Button to Toggle Sidebar -->
-                <Button
-                    android:id="@+id/btn_menu"
-                    style="?android:attr/buttonStyleSmall"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:text="☰"
-                    android:textColor="#C4C6CF"
-                    android:background="?android:attr/selectableItemBackgroundBorderless" />
-            </LinearLayout>
-        </RelativeLayout>
-
-        <!-- Divider Line -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#2D2F31" />
-
-        <!-- Fullscreen Terminal Panel -->
-        <FrameLayout
+        <!-- Screen 1: Terminal Screen -->
+        <LinearLayout
+            android:id="@+id/layout_terminal_screen"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="#0F1113">
+
+
+
+        <!-- Fullscreen Terminal Panel with Symbol Bar -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:background="#000000">
 
             <!-- Custom Terminal Scrollable View -->
@@ -123,12 +43,725 @@
                 android:textSize="10sp"
                 android:textStyle="bold" />
         </FrameLayout>
+
+        <!-- Expanded Terminal Symbol Bar (Three Rows) -->
+        <LinearLayout
+            android:id="@+id/layout_shortcut_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#151719"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp">
+
+            <!-- Row 1: ESC, TAB, CTRL, ALT, -, up, enter -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_key_esc"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="ESC"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_tab"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="TAB"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_ctrl"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="CTRL"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_alt"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="ALT"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_minus"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="-"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_up"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="▲"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_enter"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="↵"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+            </LinearLayout>
+
+            <!-- Row 2: INS, END, SHIFT, HOME, left, down, right -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_key_ins"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="INS"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_end"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="END"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_shift"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="SHIFT"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_home"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="HOME"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_left"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="◀"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_down"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="▼"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_right"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="▶"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+            </LinearLayout>
+
+            <!-- Row 3: PgUp, PgDn, Ctrl+c, Ctrl+d, fm, sb, ss -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btn_key_pgup"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="PgUp"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_pgdn"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="PgDn"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_ctrl_c"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="Ctrl+c"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_ctrl_d"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="Ctrl+d"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_fm"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="fm"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_sb"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="sb"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_key_ss"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:text="ss"
+                    android:textColor="#C4C6CF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#252729"
+                    android:padding="0dp" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- Slide-Out Sidebar / Drawer containing Keys Toolbar and Local Storage -->
+        <!-- Screen 2: Dual-Pane File Manager Screen (GONE by default) -->
+        <LinearLayout
+            android:id="@+id/layout_file_manager_screen"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="#0F1113"
+            android:visibility="gone">
+
+            <!-- File Manager Custom Header Panel -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:background="#1A1C1E"
+                android:paddingHorizontal="16dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_centerVertical="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- File Manager Icon Badge -->
+                    <FrameLayout
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@android:drawable/dialog_holo_dark_frame"
+                        android:layout_marginRight="12dp">
+                        
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:text="📁"
+                            android:textSize="18sp" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="MT Dual-Pane Explorer"
+                            android:textColor="#E2E2E6"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Tap panel to focus • Long-press for options"
+                            android:textColor="#A8C7FA"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Back to Terminal Button -->
+                <Button
+                    android:id="@+id/btn_close_file_manager"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_alignParentRight="true"
+                    android:layout_centerVertical="true"
+                    android:text="↩ Terminal"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#381E72"
+                    android:paddingHorizontal="12dp" />
+            </RelativeLayout>
+
+            <!-- Divider Line -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#2D2F31" />
+
+            <!-- Dual Columns Container -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
+
+                <!-- Left Column Panel -->
+                <LinearLayout
+                    android:id="@+id/layout_panel_left"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="6dp"
+                    android:background="#151719">
+
+                    <!-- Panel Title & Highlights -->
+                    <TextView
+                        android:id="@+id/tv_panel_left_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="◀ LEFT COLUMN (ACTIVE)"
+                        android:textColor="#A8C7FA"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Quick Storage Switchers -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="4dp">
+
+                        <Button
+                            android:id="@+id/btn_go_sandbox_left"
+                            android:layout_width="0dp"
+                            android:layout_height="32dp"
+                            android:layout_weight="1"
+                            android:layout_marginRight="2dp"
+                            android:text="Sandbox"
+                            android:textColor="#FFFFFF"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#2D2F31"
+                            android:padding="0dp" />
+
+                        <Button
+                            android:id="@+id/btn_go_sdcard_left"
+                            android:layout_width="0dp"
+                            android:layout_height="32dp"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="2dp"
+                            android:text="SD Card"
+                            android:textColor="#FFFFFF"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#2D2F31"
+                            android:padding="0dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_storage_capacity_left"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Capacity: Unknown"
+                        android:textColor="#8E9199"
+                        android:textSize="9sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Path Banner -->
+                    <TextView
+                        android:id="@+id/tv_cwd_banner_left"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#2D2F31"
+                        android:padding="6dp"
+                        android:text="/files/workspace"
+                        android:textColor="#E2E2E6"
+                        android:textSize="9sp"
+                        android:typeface="monospace"
+                        android:layout_marginBottom="4dp"
+                        android:singleLine="true"
+                        android:ellipsize="start" />
+
+                    <!-- Filter Search -->
+                    <EditText
+                        android:id="@+id/et_file_filter_left"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:hint="🔍 Filter..."
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#8E9199"
+                        android:textSize="10sp"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="4dp"
+                        android:singleLine="true"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Scroll list -->
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:isScrollContainer="true">
+
+                        <LinearLayout
+                            android:id="@+id/container_file_items_left"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </ScrollView>
+                </LinearLayout>
+
+                <!-- Vertical Column Divider -->
+                <View
+                    android:layout_width="2dp"
+                    android:layout_height="match_parent"
+                    android:background="#2D2F31" />
+
+                <!-- Right Column Panel -->
+                <LinearLayout
+                    android:id="@+id/layout_panel_right"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="6dp"
+                    android:background="#151719">
+
+                    <!-- Panel Title & Highlights -->
+                    <TextView
+                        android:id="@+id/tv_panel_right_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="RIGHT COLUMN"
+                        android:textColor="#8E9199"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Quick Storage Switchers -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="4dp">
+
+                        <Button
+                            android:id="@+id/btn_go_sandbox_right"
+                            android:layout_width="0dp"
+                            android:layout_height="32dp"
+                            android:layout_weight="1"
+                            android:layout_marginRight="2dp"
+                            android:text="Sandbox"
+                            android:textColor="#FFFFFF"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#2D2F31"
+                            android:padding="0dp" />
+
+                        <Button
+                            android:id="@+id/btn_go_sdcard_right"
+                            android:layout_width="0dp"
+                            android:layout_height="32dp"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="2dp"
+                            android:text="SD Card"
+                            android:textColor="#FFFFFF"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#2D2F31"
+                            android:padding="0dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_storage_capacity_right"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Capacity: Unknown"
+                        android:textColor="#8E9199"
+                        android:textSize="9sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Path Banner -->
+                    <TextView
+                        android:id="@+id/tv_cwd_banner_right"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#2D2F31"
+                        android:padding="6dp"
+                        android:text="/files/workspace"
+                        android:textColor="#E2E2E6"
+                        android:textSize="9sp"
+                        android:typeface="monospace"
+                        android:layout_marginBottom="4dp"
+                        android:singleLine="true"
+                        android:ellipsize="start" />
+
+                    <!-- Filter Search -->
+                    <EditText
+                        android:id="@+id/et_file_filter_right"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:hint="🔍 Filter..."
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#8E9199"
+                        android:textSize="10sp"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="4dp"
+                        android:singleLine="true"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Scroll list -->
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:isScrollContainer="true">
+
+                        <LinearLayout
+                            android:id="@+id/container_file_items_right"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </ScrollView>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Bottom Operations Bar -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="#1A1C1E"
+                android:padding="8dp">
+
+                <Button
+                    android:id="@+id/btn_action_copy"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="Copy 🖨️"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#388E3C"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_action_move"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="Move 📦"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#F57C00"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_action_rename"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="Rename 📝"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#1976D2"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_action_delete"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="Delete 🗑️"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#D32F2F"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_action_new_file"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="+ File 📄"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#2D2F31"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_action_new_folder"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="2dp"
+                    android:text="+ Dir 📁"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#2D2F31"
+                    android:padding="0dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Slide-Out Sidebar / Drawer containing Keys Toolbar -->
     <LinearLayout
         android:id="@+id/sidebar_drawer"
-        android:layout_width="300dp"
+        android:layout_width="280dp"
         android:layout_height="match_parent"
         android:layout_gravity="left"
         android:background="#1A1C1E"
@@ -151,282 +784,46 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Shortcut keys &amp; file explorer"
+            android:text="Options and Coreutils installation"
             android:textColor="#8E9199"
             android:textSize="12sp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="16dp" />
 
         <!-- Coreutils Setup Trigger Button -->
         <Button
             android:id="@+id/btn_coreutils_setup"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
+            android:layout_height="44dp"
             android:text="⚙️ Replace Toybox (Coreutils)"
             android:textColor="#FFFFFF"
             android:textSize="11sp"
             android:textStyle="bold"
             android:backgroundTint="#381E72"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="16dp"
             android:padding="0dp" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#2D2F31"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="16dp" />
 
-        <!-- Section 1: Helper Shortcut Keys (Grid Layout inside sidebar) -->
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⌨ Terminal Shortcuts"
+            android:text="How to use Dual-Pane:"
             android:textColor="#A8C7FA"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:layout_marginBottom="8dp" />
 
-        <GridLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:columnCount="3"
-            android:rowCount="2"
-            android:layout_marginBottom="20dp">
-
-            <Button
-                android:id="@+id/btn_key_esc"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="ESC"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-
-            <Button
-                android:id="@+id/btn_key_tab"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="TAB"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-
-            <Button
-                android:id="@+id/btn_key_ctrl"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="CTRL"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-
-            <Button
-                android:id="@+id/btn_key_alt"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="ALT"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-
-            <Button
-                android:id="@+id/btn_key_up"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="▲"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-
-            <Button
-                android:id="@+id/btn_key_clear"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_columnWeight="1"
-                android:layout_margin="3dp"
-                android:text="CLR"
-                android:textColor="#C4C6CF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:backgroundTint="#2D2F31"
-                android:padding="0dp" />
-        </GridLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#2D2F31"
-            android:layout_marginBottom="12dp" />
-
-        <!-- Section 2: Local Storage File Explorer -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="8dp">
-
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentLeft="true"
-                    android:text="📁 File Explorer"
-                    android:textColor="#A8C7FA"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tv_items_count"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentRight="true"
-                    android:text="0 items"
-                    android:textColor="#8E9199"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-            </RelativeLayout>
-
-            <!-- Quick Storage Switcher Tabs -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-
-                <Button
-                    android:id="@+id/btn_go_sandbox"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:layout_marginRight="4dp"
-                    android:text="📁 Sandbox"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:backgroundTint="#2D2F31"
-                    android:padding="0dp" />
-
-                <Button
-                    android:id="@+id/btn_go_sdcard"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:layout_marginLeft="4dp"
-                    android:text="💾 SD Card"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:backgroundTint="#2D2F31"
-                    android:padding="0dp" />
-            </LinearLayout>
-
-            <!-- Storage Capacity Info -->
-            <TextView
-                android:id="@+id/tv_storage_capacity"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Capacity: Unknown"
-                android:textColor="#8E9199"
-                android:textSize="11sp"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Current Working Directory Header Banner -->
-            <TextView
-                android:id="@+id/tv_cwd_banner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="#2D2F31"
-                android:padding="8dp"
-                android:text="/files/workspace"
-                android:textColor="#E2E2E6"
-                android:textSize="10sp"
-                android:typeface="monospace"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Dynamic Search / Filter Box -->
-            <EditText
-                android:id="@+id/et_file_filter"
-                android:layout_width="match_parent"
-                android:layout_height="36dp"
-                android:hint="🔍 Filter files..."
-                android:textColor="#FFFFFF"
-                android:textColorHint="#8E9199"
-                android:textSize="11sp"
-                android:background="@android:drawable/edit_text"
-                android:padding="6dp"
-                android:singleLine="true"
-                android:layout_marginBottom="4dp" />
-        </LinearLayout>
-
-        <!-- Vertical scroll of files list -->
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:isScrollContainer="true">
-
-            <LinearLayout
-                android:id="@+id/container_file_items"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
-
-        <!-- Action Quick Buttons at the very bottom of the drawer -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="16dp">
-
-            <Button
-                android:id="@+id/btn_new_file"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="+ File"
-                android:textColor="#E2E2E6"
-                android:textSize="11sp"
-                android:backgroundTint="#2D2F31"
-                android:layout_marginRight="4dp"
-                android:padding="8dp" />
-
-            <Button
-                android:id="@+id/btn_new_folder"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="+ Folder"
-                android:textColor="#E2E2E6"
-                android:textSize="11sp"
-                android:backgroundTint="#2D2F31"
-                android:layout_marginLeft="4dp"
-                android:padding="8dp" />
-        </LinearLayout>
+            android:text="• Tap left or right panel to activate.\n• Use Sandbox or SD Card buttons to navigate.\n• Tap a directory to open, tap file to select.\n• Copy/Move operates from active to inactive column.\n• Tap 'fm' key in terminal to launch file manager."
+            android:textColor="#8E9199"
+            android:textSize="11sp"
+            android:lineSpacingMultiplier="1.2" />
     </LinearLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>

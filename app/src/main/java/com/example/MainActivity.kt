@@ -43,11 +43,33 @@ class MainActivity : ComponentActivity() {
     private lateinit var viewModel: MainViewModel
     private lateinit var terminalView: TerminalView
     private lateinit var drawerLayout: DrawerLayout
-    private lateinit var tvItemsCount: TextView
-    private lateinit var tvCwdBanner: TextView
-    private lateinit var containerFileItems: LinearLayout
-    private lateinit var tvStorageCapacity: TextView
-    private lateinit var etFileFilter: EditText
+
+    enum class PanelType { LEFT, RIGHT }
+    private var activePanel = PanelType.LEFT
+    private var leftDirectory: File = File("")
+    private var rightDirectory: File = File("")
+    private var selectedFileLeft: File? = null
+    private var selectedFileRight: File? = null
+
+    // Left views
+    private lateinit var layoutPanelLeft: LinearLayout
+    private lateinit var tvPanelLeftTitle: TextView
+    private lateinit var tvCwdBannerLeft: TextView
+    private lateinit var tvStorageCapacityLeft: TextView
+    private lateinit var etFileFilterLeft: EditText
+    private lateinit var containerFileItemsLeft: LinearLayout
+
+    // Right views
+    private lateinit var layoutPanelRight: LinearLayout
+    private lateinit var tvPanelRightTitle: TextView
+    private lateinit var tvCwdBannerRight: TextView
+    private lateinit var tvStorageCapacityRight: TextView
+    private lateinit var etFileFilterRight: EditText
+    private lateinit var containerFileItemsRight: LinearLayout
+
+    // Fullscreen switcher views
+    private lateinit var layoutTerminalScreen: LinearLayout
+    private lateinit var layoutFileManagerScreen: LinearLayout
 
     private val STORAGE_PERMISSION_CODE = 1001
 
@@ -77,15 +99,11 @@ class MainActivity : ComponentActivity() {
         // Find and bind views
         terminalView = findViewById(R.id.terminal_view)
         drawerLayout = findViewById(R.id.drawer_layout)
-        tvItemsCount = findViewById(R.id.tv_items_count)
-        tvCwdBanner = findViewById(R.id.tv_cwd_banner)
-        containerFileItems = findViewById(R.id.container_file_items)
 
         setupTerminalInput()
         setupDrawerNavigation()
         setupToolbarKeys()
-        setupFileActionButtons()
-        setupAdvancedFileExplorer()
+        setupDualPaneFileManager()
         observeViewModelState()
     }
 
@@ -106,16 +124,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupDrawerNavigation() {
-        // Menu toggle button
-        findViewById<Button>(R.id.btn_menu).setOnClickListener {
-            toggleDrawer()
-        }
-
-        // Search button clears active terminal focus and re-requests it
-        findViewById<Button>(R.id.btn_search).setOnClickListener {
-            terminalView.focusTerminal()
-        }
-
         // Coreutils setup dialog trigger
         findViewById<Button>(R.id.btn_coreutils_setup).setOnClickListener {
             showCoreutilsSetupDialog()
@@ -130,64 +138,310 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setupToolbarKeys() {
-        // ESC: Send Esc character
-        findViewById<Button>(R.id.btn_key_esc).setOnClickListener {
-            viewModel.writeRawInput("\u001B")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
+    private fun updateModifierButtonStates() {
+        val ctrlBtn = findViewById<Button>(R.id.btn_key_ctrl)
+        val altBtn = findViewById<Button>(R.id.btn_key_alt)
+        val shiftBtn = findViewById<Button>(R.id.btn_key_shift)
+
+        if (terminalView.isCtrlActive) {
+            ctrlBtn.setBackgroundColor(Color.parseColor("#381E72"))
+            ctrlBtn.setTextColor(Color.WHITE)
+        } else {
+            ctrlBtn.setBackgroundColor(Color.parseColor("#252729"))
+            ctrlBtn.setTextColor(Color.parseColor("#C4C6CF"))
         }
 
-        // TAB: Send Tab character for instant shell completion
-        findViewById<Button>(R.id.btn_key_tab).setOnClickListener {
-            viewModel.writeRawInput("\t")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
+        if (terminalView.isAltActive) {
+            altBtn.setBackgroundColor(Color.parseColor("#381E72"))
+            altBtn.setTextColor(Color.WHITE)
+        } else {
+            altBtn.setBackgroundColor(Color.parseColor("#252729"))
+            altBtn.setTextColor(Color.parseColor("#C4C6CF"))
         }
 
-        // CTRL: Send Ctrl+C to interrupt active processes
-        findViewById<Button>(R.id.btn_key_ctrl).setOnClickListener {
-            viewModel.writeRawInput("\u0003")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
-        }
-
-        // ALT: Send alt help trigger
-        findViewById<Button>(R.id.btn_key_alt).setOnClickListener {
-            viewModel.writeRawInput("help\n")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
-        }
-
-        // ▲: Send Up Arrow sequence to recall command history natively in shell
-        findViewById<Button>(R.id.btn_key_up).setOnClickListener {
-            viewModel.writeRawInput("\u001B[A")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
-        }
-
-        // CLR: Clear terminal display & send CTRL+L character
-        findViewById<Button>(R.id.btn_key_clear).setOnClickListener {
-            terminalView.clearOutput()
-            viewModel.writeRawInput("\u000C")
-            terminalView.focusTerminal()
-            drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to resume terminal focus
+        if (terminalView.isShiftActive) {
+            shiftBtn.setBackgroundColor(Color.parseColor("#381E72"))
+            shiftBtn.setTextColor(Color.WHITE)
+        } else {
+            shiftBtn.setBackgroundColor(Color.parseColor("#252729"))
+            shiftBtn.setTextColor(Color.parseColor("#C4C6CF"))
         }
     }
 
-    private fun setupFileActionButtons() {
-        // Visual Manager "New File" and "New Folder" triggers
-        findViewById<Button>(R.id.btn_new_file).setOnClickListener {
-            showNewFileDialog()
+    private fun setupToolbarKeys() {
+        // Row 1: ESC, TAB, CTRL, ALT, -, up, enter
+        findViewById<Button>(R.id.btn_key_esc).setOnClickListener {
+            viewModel.writeRawInput("\u001B")
+            terminalView.focusTerminal()
         }
 
-        findViewById<Button>(R.id.btn_new_folder).setOnClickListener {
-            showNewFolderDialog()
+        findViewById<Button>(R.id.btn_key_tab).setOnClickListener {
+            viewModel.writeRawInput("\t")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_ctrl).setOnClickListener {
+            terminalView.isCtrlActive = !terminalView.isCtrlActive
+            updateModifierButtonStates()
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_alt).setOnClickListener {
+            terminalView.isAltActive = !terminalView.isAltActive
+            updateModifierButtonStates()
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_minus).setOnClickListener {
+            viewModel.writeRawInput("-")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_up).setOnClickListener {
+            viewModel.writeRawInput("\u001B[A")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_enter).setOnClickListener {
+            viewModel.writeRawInput("\n")
+            terminalView.focusTerminal()
+        }
+
+        // Row 2: INS, END, SHIFT, HOME, left, down, right
+        findViewById<Button>(R.id.btn_key_ins).setOnClickListener {
+            viewModel.writeRawInput("\u001B[2~")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_end).setOnClickListener {
+            viewModel.writeRawInput("\u001B[4~")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_shift).setOnClickListener {
+            terminalView.isShiftActive = !terminalView.isShiftActive
+            updateModifierButtonStates()
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_home).setOnClickListener {
+            viewModel.writeRawInput("\u001B[1~")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_left).setOnClickListener {
+            viewModel.writeRawInput("\u001B[D")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_down).setOnClickListener {
+            viewModel.writeRawInput("\u001B[B")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_right).setOnClickListener {
+            viewModel.writeRawInput("\u001B[C")
+            terminalView.focusTerminal()
+        }
+
+        // Row 3: PgUp, PgDn, Ctrl+c, Ctrl+d, fm, sb, ss
+        findViewById<Button>(R.id.btn_key_pgup).setOnClickListener {
+            viewModel.writeRawInput("\u001B[5~")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_pgdn).setOnClickListener {
+            viewModel.writeRawInput("\u001B[6~")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_ctrl_c).setOnClickListener {
+            viewModel.writeRawInput("\u0003")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_ctrl_d).setOnClickListener {
+            viewModel.writeRawInput("\u0004")
+            terminalView.focusTerminal()
+        }
+
+        findViewById<Button>(R.id.btn_key_fm).setOnClickListener {
+            showDualPaneFileManager()
+        }
+
+        findViewById<Button>(R.id.btn_key_sb).setOnClickListener {
+            toggleDrawer()
+        }
+
+        findViewById<Button>(R.id.btn_key_ss).setOnClickListener {
+            viewModel.restartSession()
+            Toast.makeText(this, "Terminal Session switched/restarted!", Toast.LENGTH_SHORT).show()
+            terminalView.focusTerminal()
+        }
+
+        // Register the observer so when text consumption triggers modifiers reset, visual states sync
+        terminalView.onModifiersChangedListener = {
+            updateModifierButtonStates()
+        }
+    }
+
+    private fun showDualPaneFileManager() {
+        // Toggle screen visibility
+        layoutTerminalScreen.visibility = android.view.View.GONE
+        layoutFileManagerScreen.visibility = android.view.View.VISIBLE
+        
+        // Initialize directories if not done yet
+        if (leftDirectory.absolutePath.isEmpty()) {
+            leftDirectory = viewModel.sandboxDirectory
+            rightDirectory = viewModel.sandboxDirectory
+            setActivePanelFocus(PanelType.LEFT)
+        } else {
+            refreshPanel(PanelType.LEFT)
+            refreshPanel(PanelType.RIGHT)
+        }
+    }
+
+    private fun hideDualPaneFileManager() {
+        layoutFileManagerScreen.visibility = android.view.View.GONE
+        layoutTerminalScreen.visibility = android.view.View.VISIBLE
+        terminalView.focusTerminal()
+    }
+
+    private fun setupDualPaneFileManager() {
+        // Bind screens
+        layoutTerminalScreen = findViewById(R.id.layout_terminal_screen)
+        layoutFileManagerScreen = findViewById(R.id.layout_file_manager_screen)
+
+        // Bind Left Panel
+        layoutPanelLeft = findViewById(R.id.layout_panel_left)
+        tvPanelLeftTitle = findViewById(R.id.tv_panel_left_title)
+        tvCwdBannerLeft = findViewById(R.id.tv_cwd_banner_left)
+        tvStorageCapacityLeft = findViewById(R.id.tv_storage_capacity_left)
+        etFileFilterLeft = findViewById(R.id.et_file_filter_left)
+        containerFileItemsLeft = findViewById(R.id.container_file_items_left)
+
+        // Bind Right Panel
+        layoutPanelRight = findViewById(R.id.layout_panel_right)
+        tvPanelRightTitle = findViewById(R.id.tv_panel_right_title)
+        tvCwdBannerRight = findViewById(R.id.tv_cwd_banner_right)
+        tvStorageCapacityRight = findViewById(R.id.tv_storage_capacity_right)
+        etFileFilterRight = findViewById(R.id.et_file_filter_right)
+        containerFileItemsRight = findViewById(R.id.container_file_items_right)
+
+        // Focus listeners to switch active panel
+        layoutPanelLeft.setOnClickListener {
+            setActivePanelFocus(PanelType.LEFT)
+        }
+        layoutPanelRight.setOnClickListener {
+            setActivePanelFocus(PanelType.RIGHT)
+        }
+
+        // Sandbox & SD Card shortcuts
+        findViewById<Button>(R.id.btn_go_sandbox_left).setOnClickListener {
+            leftDirectory = viewModel.sandboxDirectory
+            refreshPanel(PanelType.LEFT)
+        }
+        findViewById<Button>(R.id.btn_go_sdcard_left).setOnClickListener {
+            checkAndNavigateToSdCardDualPane(PanelType.LEFT)
+        }
+        findViewById<Button>(R.id.btn_go_sandbox_right).setOnClickListener {
+            rightDirectory = viewModel.sandboxDirectory
+            refreshPanel(PanelType.RIGHT)
+        }
+        findViewById<Button>(R.id.btn_go_sdcard_right).setOnClickListener {
+            checkAndNavigateToSdCardDualPane(PanelType.RIGHT)
+        }
+
+        // Live filters
+        etFileFilterLeft.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshPanel(PanelType.LEFT)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        etFileFilterRight.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshPanel(PanelType.RIGHT)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        // Close / Back button
+        findViewById<Button>(R.id.btn_close_file_manager).setOnClickListener {
+            hideDualPaneFileManager()
+        }
+
+        // Action Buttons
+        findViewById<Button>(R.id.btn_action_copy).setOnClickListener {
+            performCopyAction()
+        }
+        findViewById<Button>(R.id.btn_action_move).setOnClickListener {
+            performMoveAction()
+        }
+        findViewById<Button>(R.id.btn_action_rename).setOnClickListener {
+            performRenameAction()
+        }
+        findViewById<Button>(R.id.btn_action_delete).setOnClickListener {
+            performDeleteAction()
+        }
+        findViewById<Button>(R.id.btn_action_new_file).setOnClickListener {
+            performNewFileDialog()
+        }
+        findViewById<Button>(R.id.btn_action_new_folder).setOnClickListener {
+            performNewFolderDialog()
+        }
+    }
+
+    private fun checkAndNavigateToSdCardDualPane(panel: PanelType) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                if (panel == PanelType.LEFT) {
+                    leftDirectory = viewModel.sdcardDirectory
+                } else {
+                    rightDirectory = viewModel.sdcardDirectory
+                }
+                refreshPanel(panel)
+            } else {
+                Toast.makeText(this, "Please grant SD Card access via settings", Toast.LENGTH_LONG).show()
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        } else {
+            val readPerm = android.Manifest.permission.READ_EXTERNAL_STORAGE
+            val writePerm = android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, readPerm) == PackageManager.PERMISSION_GRANTED) {
+                if (panel == PanelType.LEFT) {
+                    leftDirectory = viewModel.sdcardDirectory
+                } else {
+                    rightDirectory = viewModel.sdcardDirectory
+                }
+                refreshPanel(panel)
+            } else {
+                ActivityCompat.requestPermissions(this, arrayOf(readPerm, writePerm), STORAGE_PERMISSION_CODE)
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == STORAGE_PERMISSION_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Permission granted. Tap SD Card button again to navigate.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     private fun observeViewModelState() {
-        // Collect real-time output stream from persistent background PTY shell
         lifecycleScope.launch {
             viewModel.terminalOutputFlow.collect { outputText ->
                 if (outputText == "\u001B[2J\u001B[H") {
@@ -198,14 +452,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Collect current directory and derived files list to update Visual storage drawer
         lifecycleScope.launch {
-            viewModel.fileList.collectLatest { files ->
-                updateVisualFileList(files)
+            viewModel.fileList.collectLatest { _ ->
+                if (leftDirectory.absolutePath.isNotEmpty()) {
+                    refreshPanel(PanelType.LEFT)
+                    refreshPanel(PanelType.RIGHT)
+                }
             }
         }
 
-        // Collect visual text editor state
         lifecycleScope.launch {
             viewModel.editorFile.collectLatest { file ->
                 if (file != null) {
@@ -217,87 +472,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setupAdvancedFileExplorer() {
-        tvStorageCapacity = findViewById(R.id.tv_storage_capacity)
-        etFileFilter = findViewById(R.id.et_file_filter)
-
-        // Sandbox Shortcut button
-        findViewById<Button>(R.id.btn_go_sandbox).setOnClickListener {
-            viewModel.navigateTo(viewModel.sandboxDirectory)
-            terminalView.focusTerminal()
-        }
-
-        // SD Card Shortcut button
-        findViewById<Button>(R.id.btn_go_sdcard).setOnClickListener {
-            checkAndNavigateToSdCard()
-        }
-
-        // Filter edit text live search
-        etFileFilter.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                viewModel.setFilterQuery(s?.toString() ?: "")
+    private fun setActivePanelFocus(panel: PanelType) {
+        activePanel = panel
+        if (panel == PanelType.LEFT) {
+            layoutPanelLeft.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#151719"))
+                setStroke(3, Color.parseColor("#4D8BF5"))
             }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-    }
-
-    private fun checkAndNavigateToSdCard() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager()) {
-                viewModel.navigateTo(viewModel.sdcardDirectory)
-                terminalView.focusTerminal()
-            } else {
-                showManageStorageExplanationDialog()
+            layoutPanelRight.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#151719"))
+                setStroke(0, Color.TRANSPARENT)
             }
+            tvPanelLeftTitle.text = "◀ LEFT COLUMN (ACTIVE)"
+            tvPanelLeftTitle.setTextColor(Color.parseColor("#A8C7FA"))
+            tvPanelRightTitle.text = "RIGHT COLUMN"
+            tvPanelRightTitle.setTextColor(Color.parseColor("#8E9199"))
         } else {
-            val readPerm = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            val writePerm = ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            if (readPerm == PackageManager.PERMISSION_GRANTED && writePerm == PackageManager.PERMISSION_GRANTED) {
-                viewModel.navigateTo(viewModel.sdcardDirectory)
-                terminalView.focusTerminal()
-            } else {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(
-                        android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ),
-                    STORAGE_PERMISSION_CODE
-                )
+            layoutPanelRight.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#151719"))
+                setStroke(3, Color.parseColor("#4D8BF5"))
             }
-        }
-    }
-
-    private fun showManageStorageExplanationDialog() {
-        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-            .setTitle("SD Card Access Required")
-            .setMessage("To fully explore, rename, delete, and modify files on your SD Card/External Storage, please enable 'All Files Access' for TermExplorer in the settings.")
-            .setPositiveButton("Go to Settings") { _, _ ->
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                        data = Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
-                }
+            layoutPanelLeft.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.parseColor("#151719"))
+                setStroke(0, Color.TRANSPARENT)
             }
-            .setNegativeButton("Cancel") { _, _ ->
-                viewModel.navigateTo(viewModel.sdcardDirectory)
-                terminalView.focusTerminal()
-            }
-            .show()
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == STORAGE_PERMISSION_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                viewModel.navigateTo(viewModel.sdcardDirectory)
-                terminalView.focusTerminal()
-            }
+            tvPanelRightTitle.text = "RIGHT COLUMN (ACTIVE) ▶"
+            tvPanelRightTitle.setTextColor(Color.parseColor("#A8C7FA"))
+            tvPanelLeftTitle.text = "LEFT COLUMN"
+            tvPanelLeftTitle.setTextColor(Color.parseColor("#8E9199"))
         }
     }
 
@@ -308,54 +510,76 @@ class MainActivity : ComponentActivity() {
         return String.format("%.1f %s", bytes / Math.pow(1024.0, exp.toDouble()), pre)
     }
 
-    private fun updateVisualFileList(files: List<File>) {
-        containerFileItems.removeAllViews()
-        
-        tvItemsCount.text = "${files.size} items"
-        
-        val currentDir = viewModel.currentDirectory.value
-        tvCwdBanner.text = currentDir.absolutePath
+    private fun refreshPanel(panel: PanelType) {
+        val dir = if (panel == PanelType.LEFT) leftDirectory else rightDirectory
+        if (dir.absolutePath.isEmpty()) return
 
-        // Update capacity metrics dynamically
+        val container = if (panel == PanelType.LEFT) containerFileItemsLeft else containerFileItemsRight
+        val banner = if (panel == PanelType.LEFT) tvCwdBannerLeft else tvCwdBannerRight
+        val capacity = if (panel == PanelType.LEFT) tvStorageCapacityLeft else tvStorageCapacityRight
+        val filterEt = if (panel == PanelType.LEFT) etFileFilterLeft else etFileFilterRight
+        val filterQuery = filterEt.text.toString().trim()
+
+        banner.text = dir.absolutePath
+
         try {
-            val freeGb = currentDir.freeSpace / (1024.0 * 1024.0 * 1024.0)
-            val totalGb = currentDir.totalSpace / (1024.0 * 1024.0 * 1024.0)
-            tvStorageCapacity.text = String.format("Capacity: %.2f GB Free / %.2f GB Total", freeGb, totalGb)
+            val freeGb = dir.freeSpace / (1024.0 * 1024.0 * 1024.0)
+            val totalGb = dir.totalSpace / (1024.0 * 1024.0 * 1024.0)
+            capacity.text = String.format("Capacity: %.2f GB Free / %.2f GB Total", freeGb, totalGb)
         } catch (e: Exception) {
-            tvStorageCapacity.text = "Capacity: Unknown"
+            capacity.text = "Capacity: Unknown"
         }
 
-        // Add Up (..) directory if parent exists
-        val parentDir = currentDir.parentFile
-        if (parentDir != null) {
+        val files = try {
+            val list = dir.listFiles()?.toList() ?: emptyList()
+            val filtered = if (filterQuery.isBlank()) {
+                list
+            } else {
+                list.filter { it.name.contains(filterQuery, ignoreCase = true) }
+            }
+            filtered.sortedWith(
+                compareBy({ !it.isDirectory }, { it.name.lowercase() })
+            )
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        container.removeAllViews()
+
+        val parentDir = dir.parentFile
+        if (parentDir != null && dir.absolutePath != "/" && dir.absolutePath != viewModel.sandboxDirectory.parentFile?.absolutePath) {
             val upLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 0, 0, 16)
+                    setMargins(0, 0, 0, 8)
                 }
                 background = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor("#1E2E42"))
-                    cornerRadius = 12f
+                    cornerRadius = 8f
                     setStroke(2, Color.parseColor("#2B4C7E"))
                 }
-                setPadding(24, 20, 24, 20)
+                setPadding(16, 12, 16, 12)
                 gravity = Gravity.CENTER_VERTICAL
                 isClickable = true
                 isFocusable = true
                 
                 setOnClickListener {
-                    viewModel.navigateUp()
-                    terminalView.focusTerminal()
+                    if (panel == PanelType.LEFT) {
+                        leftDirectory = parentDir
+                    } else {
+                        rightDirectory = parentDir
+                    }
+                    refreshPanel(panel)
                 }
             }
 
             val iconView = TextView(this).apply {
                 text = "↩️"
-                textSize = 18f
-                setPadding(0, 0, 16, 0)
+                textSize = 14f
+                setPadding(0, 0, 8, 0)
             }
             upLayout.addView(iconView)
 
@@ -367,73 +591,80 @@ class MainActivity : ComponentActivity() {
             val nameView = TextView(this).apply {
                 text = ".. (Parent Directory)"
                 setTextColor(Color.parseColor("#A8C7FA"))
-                textSize = 13f
+                textSize = 12f
                 setTypeface(null, Typeface.BOLD)
             }
             textLayout.addView(nameView)
 
-            val detailView = TextView(this).apply {
-                text = "Tap to navigate up to: ${parentDir.name.ifEmpty { "/" }}"
-                setTextColor(Color.parseColor("#8E9199"))
-                textSize = 11f
-            }
-            textLayout.addView(detailView)
-
             upLayout.addView(textLayout)
-            containerFileItems.addView(upLayout)
+            container.addView(upLayout)
         }
 
         if (files.isEmpty()) {
             val emptyText = TextView(this).apply {
                 text = "This directory is empty."
                 setTextColor(Color.parseColor("#8E9199"))
-                textSize = 12f
-                setPadding(0, 32, 0, 32)
+                textSize = 11f
+                setPadding(0, 16, 0, 16)
                 gravity = Gravity.CENTER
             }
-            containerFileItems.addView(emptyText)
+            container.addView(emptyText)
             return
         }
 
         for (file in files) {
-            // Create a gorgeous visual file card programmatically
+            val isSelected = if (panel == PanelType.LEFT) (selectedFileLeft == file) else (selectedFileRight == file)
             val itemLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 0, 0, 16)
+                    setMargins(0, 0, 0, 8)
                 }
                 
-                // Redesigned modern flat background with thin border and rounded corners
                 background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor("#25282C"))
-                    cornerRadius = 12f
-                    setStroke(2, Color.parseColor("#3D4146"))
+                    setColor(if (isSelected) Color.parseColor("#223147") else Color.parseColor("#25282C"))
+                    cornerRadius = 8f
+                    setStroke(2, if (isSelected) Color.parseColor("#4D8BF5") else Color.parseColor("#3D4146"))
                 }
-                setPadding(24, 24, 24, 24)
+                setPadding(16, 14, 16, 14)
                 gravity = Gravity.CENTER_VERTICAL
                 isClickable = true
                 isFocusable = true
                 
                 setOnClickListener {
+                    setActivePanelFocus(panel)
                     if (file.isDirectory) {
-                        viewModel.navigateTo(file)
-                        terminalView.focusTerminal()
+                        if (panel == PanelType.LEFT) {
+                            leftDirectory = file
+                            selectedFileLeft = null
+                        } else {
+                            rightDirectory = file
+                            selectedFileRight = null
+                        }
+                        refreshPanel(panel)
                     } else {
-                        viewModel.openFileInEditor(file)
-                        drawerLayout.closeDrawer(Gravity.LEFT) // Close drawer to edit
+                        if (panel == PanelType.LEFT) {
+                            selectedFileLeft = if (selectedFileLeft == file) null else file
+                        } else {
+                            selectedFileRight = if (selectedFileRight == file) null else file
+                        }
+                        refreshPanel(PanelType.LEFT)
+                        refreshPanel(PanelType.RIGHT)
                     }
                 }
                 
                 setOnLongClickListener {
-                    showFileOptionsMenu(file)
+                    setActivePanelFocus(panel)
+                    if (panel == PanelType.LEFT) selectedFileLeft = file else selectedFileRight = file
+                    refreshPanel(PanelType.LEFT)
+                    refreshPanel(PanelType.RIGHT)
+                    showFileOptionsMenu(file, panel)
                     true
                 }
             }
 
-            // Custom colorful file icon based on file type / extension
             val extension = file.extension.lowercase()
             val iconEmoji = when {
                 file.isDirectory -> "📁"
@@ -447,12 +678,11 @@ class MainActivity : ComponentActivity() {
 
             val iconView = TextView(this).apply {
                 text = iconEmoji
-                textSize = 18f
-                setPadding(0, 0, 16, 0)
+                textSize = 14f
+                setPadding(0, 0, 8, 0)
             }
             itemLayout.addView(iconView)
 
-            // Name & Info Columns
             val textLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -461,67 +691,206 @@ class MainActivity : ComponentActivity() {
             val nameView = TextView(this).apply {
                 text = file.name
                 setTextColor(Color.parseColor("#E2E2E6"))
-                textSize = 13f
+                textSize = 12f
                 setTypeface(null, Typeface.BOLD)
             }
             textLayout.addView(nameView)
 
-            // Enhanced File Info (Formatted size, Last modified, and Read/Write/Exec permissions)
             val detailView = TextView(this).apply {
                 val sizeStr = if (file.isDirectory) "Folder" else formatFileSize(file.length())
-                
-                // Read last modified time
-                val sdf = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault())
+                val sdf = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
                 val dateStr = sdf.format(java.util.Date(file.lastModified()))
-                
-                // Get permissions string
                 val r = if (file.canRead()) "r" else "-"
                 val w = if (file.canWrite()) "w" else "-"
                 val x = if (file.canExecute()) "x" else "-"
-                val permStr = "[$r$w$x]"
-
-                text = "$sizeStr  •  $dateStr  •  $permStr"
+                text = "$sizeStr • $dateStr • [$r$w$x]"
                 setTextColor(Color.parseColor("#8E9199"))
-                textSize = 11f
+                textSize = 10f
             }
             textLayout.addView(detailView)
 
             itemLayout.addView(textLayout)
 
-            // Option button trigger
             val menuBtn = TextView(this).apply {
                 text = "⋮"
-                textSize = 16f
+                textSize = 14f
                 setTextColor(Color.parseColor("#8E9199"))
-                setPadding(16, 16, 16, 16)
+                setPadding(12, 12, 12, 12)
                 setOnClickListener {
-                    showFileOptionsMenu(file)
+                    setActivePanelFocus(panel)
+                    if (panel == PanelType.LEFT) selectedFileLeft = file else selectedFileRight = file
+                    refreshPanel(PanelType.LEFT)
+                    refreshPanel(PanelType.RIGHT)
+                    showFileOptionsMenu(file, panel)
                 }
             }
             itemLayout.addView(menuBtn)
 
-            containerFileItems.addView(itemLayout)
+            container.addView(itemLayout)
         }
     }
 
-    private fun showFileOptionsMenu(file: File) {
-        val options = arrayOf("Rename", "Delete")
+    private fun showFileOptionsMenu(file: File, panel: PanelType) {
+        val options = if (file.isDirectory) {
+            arrayOf("Rename", "Delete")
+        } else {
+            arrayOf("Edit", "Rename", "Delete")
+        }
         AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
             .setTitle(file.name)
             .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showRenameDialog(file)
-                    1 -> showDeleteConfirmation(file)
+                val adjustedWhich = if (file.isDirectory) which + 1 else which
+                when (adjustedWhich) {
+                    0 -> {
+                        viewModel.openFileInEditor(file)
+                    }
+                    1 -> {
+                        if (panel == PanelType.LEFT) selectedFileLeft = file else selectedFileRight = file
+                        performRenameAction()
+                    }
+                    2 -> {
+                        if (panel == PanelType.LEFT) selectedFileLeft = file else selectedFileRight = file
+                        performDeleteAction()
+                    }
                 }
             }
             .show()
     }
 
-    private fun showRenameDialog(file: File) {
+    private fun performCopyAction() {
+        val activeFile = if (activePanel == PanelType.LEFT) selectedFileLeft else selectedFileRight
+        if (activeFile == null) {
+            Toast.makeText(this, "Please select a file to copy first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val destDir = if (activePanel == PanelType.LEFT) rightDirectory else leftDirectory
+        val destFile = File(destDir, activeFile.name)
+        
+        if (destFile.exists()) {
+            AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle("Overwrite confirmation")
+                .setMessage("File ${activeFile.name} already exists in destination. Overwrite?")
+                .setPositiveButton("Overwrite") { _, _ ->
+                    doCopy(activeFile, destFile)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            doCopy(activeFile, destFile)
+        }
+    }
+
+    private fun doCopy(src: File, dest: File) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                if (src.isDirectory) {
+                    src.copyRecursively(dest, overwrite = true)
+                } else {
+                    src.copyTo(dest, overwrite = true)
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Copied successfully", Toast.LENGTH_SHORT).show()
+                    viewModel.appendOutput("\u001B[1;32m[Explorer] Copied ${src.name} to ${dest.parentFile?.name}\u001B[0m\r\n")
+                    refreshPanel(PanelType.LEFT)
+                    refreshPanel(PanelType.RIGHT)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Copy failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun performMoveAction() {
+        val activeFile = if (activePanel == PanelType.LEFT) selectedFileLeft else selectedFileRight
+        if (activeFile == null) {
+            Toast.makeText(this, "Please select a file to move first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val destDir = if (activePanel == PanelType.LEFT) rightDirectory else leftDirectory
+        val destFile = File(destDir, activeFile.name)
+
+        if (destFile.exists()) {
+            AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                .setTitle("Overwrite confirmation")
+                .setMessage("File ${activeFile.name} already exists in destination. Overwrite?")
+                .setPositiveButton("Overwrite") { _, _ ->
+                    doMove(activeFile, destFile)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            doMove(activeFile, destFile)
+        }
+    }
+
+    private fun doMove(src: File, dest: File) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val success = src.renameTo(dest)
+                if (!success) {
+                    if (src.isDirectory) {
+                        src.copyRecursively(dest, overwrite = true)
+                    } else {
+                        src.copyTo(dest, overwrite = true)
+                    }
+                    src.deleteRecursively()
+                }
+                withContext(Dispatchers.Main) {
+                    if (activePanel == PanelType.LEFT) selectedFileLeft = null else selectedFileRight = null
+                    Toast.makeText(this@MainActivity, "Moved successfully", Toast.LENGTH_SHORT).show()
+                    viewModel.appendOutput("\u001B[1;32m[Explorer] Moved ${src.name} to ${dest.parentFile?.name}\u001B[0m\r\n")
+                    refreshPanel(PanelType.LEFT)
+                    refreshPanel(PanelType.RIGHT)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Move failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun performDeleteAction() {
+        val activeFile = if (activePanel == PanelType.LEFT) selectedFileLeft else selectedFileRight
+        if (activeFile == null) {
+            Toast.makeText(this, "Please select a file to delete first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+            .setTitle("Delete")
+            .setMessage("Are you sure you want to delete ${activeFile.name}?")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val success = activeFile.deleteRecursively()
+                    withContext(Dispatchers.Main) {
+                        if (success) {
+                            if (activePanel == PanelType.LEFT) selectedFileLeft = null else selectedFileRight = null
+                            Toast.makeText(this@MainActivity, "Deleted successfully", Toast.LENGTH_SHORT).show()
+                            viewModel.appendOutput("\u001B[1;32m[Explorer] Deleted: ${activeFile.name}\u001B[0m\r\n")
+                            refreshPanel(PanelType.LEFT)
+                            refreshPanel(PanelType.RIGHT)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Delete failed", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun performRenameAction() {
+        val activeFile = if (activePanel == PanelType.LEFT) selectedFileLeft else selectedFileRight
+        if (activeFile == null) {
+            Toast.makeText(this, "Please select a file to rename first", Toast.LENGTH_SHORT).show()
+            return
+        }
         val input = EditText(this).apply {
-            setText(file.name)
+            setText(activeFile.name)
             setTextColor(Color.WHITE)
-            setSelection(file.name.lastIndexOf('.').let { if (it > 0) it else file.name.length })
+            setSelection(activeFile.name.lastIndexOf('.').let { if (it > 0) it else activeFile.name.length })
         }
         
         AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
@@ -530,25 +899,29 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton("Rename") { _, _ ->
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
-                    viewModel.renameFileInExplorer(file, newName)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val dest = File(activeFile.parentFile, newName)
+                        val success = activeFile.renameTo(dest)
+                        withContext(Dispatchers.Main) {
+                            if (success) {
+                                if (activePanel == PanelType.LEFT) selectedFileLeft = dest else selectedFileRight = dest
+                                Toast.makeText(this@MainActivity, "Renamed successfully", Toast.LENGTH_SHORT).show()
+                                viewModel.appendOutput("\u001B[1;32m[Explorer] Renamed ${activeFile.name} to $newName\u001B[0m\r\n")
+                                refreshPanel(PanelType.LEFT)
+                                refreshPanel(PanelType.RIGHT)
+                            } else {
+                                Toast.makeText(this@MainActivity, "Rename failed", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun showDeleteConfirmation(file: File) {
-        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-            .setTitle("Delete")
-            .setMessage("Are you sure you want to delete ${file.name}?")
-            .setPositiveButton("Delete") { _, _ ->
-                viewModel.deleteFileInExplorer(file)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showNewFileDialog() {
+    private fun performNewFileDialog() {
+        val dir = if (activePanel == PanelType.LEFT) leftDirectory else rightDirectory
         val input = EditText(this).apply {
             setHint("file.txt")
             setHintTextColor(Color.GRAY)
@@ -560,14 +933,32 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    viewModel.createNewFileInExplorer(name)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val file = File(dir, name)
+                        if (!file.exists()) {
+                            try {
+                                file.createNewFile()
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "File created", Toast.LENGTH_SHORT).show()
+                                    viewModel.appendOutput("\u001B[1;32m[Explorer] Created file: $name\u001B[0m\r\n")
+                                    refreshPanel(PanelType.LEFT)
+                                    refreshPanel(PanelType.RIGHT)
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "Creation failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun showNewFolderDialog() {
+    private fun performNewFolderDialog() {
+        val dir = if (activePanel == PanelType.LEFT) leftDirectory else rightDirectory
         val input = EditText(this).apply {
             setHint("Folder Name")
             setHintTextColor(Color.GRAY)
@@ -579,7 +970,22 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isNotEmpty()) {
-                    viewModel.createNewFolderInExplorer(name)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val folder = File(dir, name)
+                        if (!folder.exists()) {
+                            val success = folder.mkdirs()
+                            withContext(Dispatchers.Main) {
+                                if (success) {
+                                    Toast.makeText(this@MainActivity, "Folder created", Toast.LENGTH_SHORT).show()
+                                    viewModel.appendOutput("\u001B[1;32m[Explorer] Created folder: $name\u001B[0m\r\n")
+                                    refreshPanel(PanelType.LEFT)
+                                    refreshPanel(PanelType.RIGHT)
+                                } else {
+                                    Toast.makeText(this@MainActivity, "Creation failed", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)

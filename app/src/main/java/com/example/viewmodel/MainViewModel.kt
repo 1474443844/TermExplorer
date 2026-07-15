@@ -102,6 +102,9 @@ class MainViewModel(
         setupWorkspaceSandbox()
         _currentDirectory.value = workspaceDir
         
+        // Auto-install built-in coreutils if not already present
+        com.example.terminal.CoreutilsManager.isInstalled(application)
+        
         // Setup background PTY Session
         setupPtySession()
 
@@ -117,8 +120,7 @@ class MainViewModel(
     }
 
     private fun setupPtySession() {
-        val filesDir = getApplication<Application>().filesDir
-        ptySession = PtySession(workspaceDir, filesDir) { outputText ->
+        ptySession = PtySession(workspaceDir, getApplication<Application>()) { outputText ->
             appendOutput(outputText)
             // Automatically rescan the directory in case commands changed file structures
             viewModelScope.launch {
@@ -184,6 +186,21 @@ echo "${"\u001B"}[1;36mAll systems green!${"\u001B"}[0m"
 [✓] Style terminal toolbar with fast command shortcuts
 [✓] Integrate Room DB for shell history persistence
 [ ] Add adaptive layout for foldable and tablet displays
+            """.trimIndent())
+
+            // 4. Sample .bashrc configuration file
+            File(workspaceDir, ".bashrc").writeText("""
+# Welcome to your TermExplorer BashRC file!
+# You can define custom environment variables, aliases, or functions here.
+# It will be sourced automatically whenever a new terminal session starts.
+
+# Custom Environment Variables
+# export MY_VAR="Awesome Terminal"
+
+# Custom Command Aliases
+alias c='clear'
+alias h='history'
+alias welcome='echo "Happy hacking! :)"'
             """.trimIndent())
         }
     }

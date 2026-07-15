@@ -14,7 +14,7 @@ object CoreutilsManager {
     private const val TAG = "CoreutilsManager"
 
     val COREUTILS_COMMANDS = listOf(
-        "ls", "cat", "mv", "cp", "rm", "mkdir", "rmdir", "pwd", "whoami", "id", "uname",
+        "ls", "cat", "mv", "cp", "rm", "mkdir", "rmdir", "pwd", "whoami", "id",
         "chmod", "chown", "chgrp", "touch", "ln", "head", "tail", "wc", "sort", "uniq",
         "grep", "egrep", "fgrep", "date", "du", "df", "stat", "echo", "sleep", "env",
         "printenv", "printf", "true", "false", "test", "[", "expr", "seq", "tee",
@@ -50,8 +50,12 @@ object CoreutilsManager {
     fun installFromJniLibs(context: Context): Boolean {
         try {
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
-            val builtInLib = File(nativeLibDir, "libcoreutils.so")
-            if (builtInLib.exists()) {
+            val builtInLib = listOf(
+                File(nativeLibDir, "coreutils"),
+                File(nativeLibDir, "libcoreutils.so")
+            ).firstOrNull { it.exists() }
+            
+            if (builtInLib != null && builtInLib.exists()) {
                 val binDir = File(context.filesDir, "bin")
                 if (!binDir.exists()) {
                     binDir.mkdirs()
@@ -266,6 +270,14 @@ object CoreutilsManager {
         val binDir = File(context.filesDir, "bin")
         val coreutilsFile = File(binDir, "coreutils")
         if (!coreutilsFile.exists()) return
+
+        // Clean up any existing files/symlinks in binDir that are NOT in COREUTILS_COMMANDS and not "coreutils" itself
+        binDir.listFiles()?.forEach { file ->
+            val name = file.name
+            if (name != "coreutils" && name !in COREUTILS_COMMANDS) {
+                file.delete()
+            }
+        }
 
         for (cmd in COREUTILS_COMMANDS) {
             val linkFile = File(binDir, cmd)

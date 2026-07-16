@@ -7,4 +7,24 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- File manager palette -->
+    <color name="fm_bg">#0B0D10</color>
+    <color name="fm_surface">#12151A</color>
+    <color name="fm_surface_2">#1A1F27</color>
+    <color name="fm_surface_3">#232A34</color>
+    <color name="fm_stroke">#2C3440</color>
+    <color name="fm_accent">#5B8CFF</color>
+    <color name="fm_accent_soft">#1B2A4A</color>
+    <color name="fm_text_primary">#E8EAED</color>
+    <color name="fm_text_secondary">#9AA3B2</color>
+    <color name="fm_text_muted">#6B7380</color>
+    <color name="fm_success">#3DDC84</color>
+    <color name="fm_warning">#F5A524</color>
+    <color name="fm_danger">#F07178</color>
+    <color name="fm_info">#59C2FF</color>
+    <color name="fm_panel_active">#152033</color>
+    <color name="fm_item">#171C24</color>
+    <color name="fm_item_selected">#1E2D4A</color>
+    <color name="fm_parent">#162536</color>
 </resources>

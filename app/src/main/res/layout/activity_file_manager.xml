@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fm_drawer_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- ========== Main content ========== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/fm_bg"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:background="@color/fm_surface"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp">
+
+            <Button
+                android:id="@+id/btn_open_sidebar"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_fm_header_icon"
+                android:contentDescription="@string/sidebar_open"
+                android:minWidth="0dp"
+                android:padding="0dp"
+                android:stateListAnimator="@null"
+                android:text="☰"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_fm_header_icon">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="📁"
+                    android:textSize="16sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/file_manager_title"
+                    android:textColor="@color/fm_text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_header_active_hint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:text="@string/file_manager_subtitle"
+                    android:textColor="@color/fm_accent"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_close_file_manager"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_fm_header_icon"
+                android:contentDescription="@string/back_to_terminal"
+                android:minWidth="0dp"
+                android:paddingHorizontal="12dp"
+                android:stateListAnimator="@null"
+                android:text="↩ Terminal"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/fm_stroke" />
+
+        <!-- Dual panels -->
+
+        <!-- Bottom action bar -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <include
+                android:id="@+id/layout_panel_left"
+                layout="@layout/include_file_panel"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="match_parent" />
+
+            <include
+                android:id="@+id/layout_panel_right"
+                layout="@layout/include_file_panel"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/fm_surface"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="10dp">
+
+            <Button
+                android:id="@+id/btn_action_copy"
+                style="@style/FmActionButton"
+                android:backgroundTint="@color/fm_success"
+                android:text="@string/action_copy" />
+
+            <Button
+                android:id="@+id/btn_action_move"
+                style="@style/FmActionButton"
+                android:backgroundTint="@color/fm_warning"
+                android:text="@string/action_move" />
+
+            <Button
+                android:id="@+id/btn_action_rename"
+                style="@style/FmActionButton"
+                android:backgroundTint="@color/fm_info"
+                android:text="@string/action_rename" />
+
+            <Button
+                android:id="@+id/btn_action_delete"
+                style="@style/FmActionButton"
+                android:backgroundTint="@color/fm_danger"
+                android:text="@string/action_delete" />
+
+            <Button
+                android:id="@+id/btn_action_new_file"
+                style="@style/FmActionButton"
+                android:text="@string/action_new_file" />
+
+            <Button
+                android:id="@+id/btn_action_new_folder"
+                style="@style/FmActionButton"
+                android:text="@string/action_new_folder" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ========== Left sidebar drawer ========== -->
+    <LinearLayout
+        android:id="@+id/fm_sidebar"
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/fm_surface"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:paddingTop="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/sidebar_title"
+                    android:textColor="@color/fm_text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_sidebar_active_panel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/sidebar_target_left"
+                    android:textColor="@color/fm_accent"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_sidebar_refresh"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_fm_chip"
+                android:minWidth="0dp"
+                android:paddingHorizontal="10dp"
+                android:stateListAnimator="@null"
+                android:text="@string/sidebar_refresh"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/fm_stroke" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="14dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="6dp"
+            android:text="@string/sidebar_places"
+            android:textColor="@color/fm_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_sidebar_places"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingHorizontal="10dp"
+            android:paddingBottom="8dp"
+            android:scrollbars="vertical" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/fm_stroke" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <Button
+                android:id="@+id/btn_sidebar_swap_panels"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_fm_chip"
+                android:stateListAnimator="@null"
+                android:text="@string/sidebar_swap_panels"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_sidebar_same_both"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_fm_chip"
+                android:stateListAnimator="@null"
+                android:text="@string/sidebar_same_both"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/sidebar_help"
+                android:textColor="@color/fm_text_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.drawerlayout.widget.DrawerLayout>

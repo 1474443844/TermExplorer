@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_fm_panel"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/tv_panel_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:gravity="center"
+        android:letterSpacing="0.08"
+        android:text="@string/panel_left"
+        android:textColor="@color/fm_text_secondary"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_go_sandbox"
+            style="@style/FmPanelStorageButton"
+            android:layout_marginEnd="4dp"
+            android:text="@string/sandbox" />
+
+        <Button
+            android:id="@+id/btn_go_sdcard"
+            style="@style/FmPanelStorageButton"
+            android:layout_marginStart="4dp"
+            android:text="@string/sd_card" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_storage_capacity"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/capacity_unknown"
+        android:textColor="@color/fm_text_muted"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/tv_cwd_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_fm_path"
+        android:ellipsize="start"
+        android:fontFamily="monospace"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="7dp"
+        android:singleLine="true"
+        android:text="/files/workspace"
+        android:textColor="@color/fm_text_primary"
+        android:textSize="10sp" />
+
+    <EditText
+        android:id="@+id/et_file_filter"
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_fm_path"
+        android:hint="@string/filter_hint"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:paddingHorizontal="10dp"
+        android:singleLine="true"
+        android:textColor="@color/fm_text_primary"
+        android:textColorHint="@color/fm_text_muted"
+        android:textSize="12sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_file_items"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingBottom="4dp"
+        android:scrollbars="vertical" />
+</LinearLayout>

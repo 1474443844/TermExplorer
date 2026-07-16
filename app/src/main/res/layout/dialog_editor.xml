@@ -2,8 +2,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="#0F1113"
+    android:orientation="vertical"
     android:padding="16dp">
 
     <!-- Header bar -->
@@ -33,19 +33,19 @@
                 android:id="@+id/btn_editor_save"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginRight="8dp"
+                android:backgroundTint="#381E72"
                 android:text="Save"
                 android:textColor="#E2E2E6"
-                android:backgroundTint="#381E72"
-                android:textSize="12sp"
-                android:layout_marginRight="8dp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btn_editor_close"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:backgroundTint="#2D2F31"
                 android:text="Close"
                 android:textColor="#E2E2E6"
-                android:backgroundTint="#2D2F31"
                 android:textSize="12sp" />
         </LinearLayout>
     </RelativeLayout>
@@ -53,8 +53,8 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#2D2F31"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="12dp"
+        android:background="#2D2F31" />
 
     <!-- Multiline editor area -->
     <ScrollView
@@ -62,19 +62,19 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:background="#000000"
-        android:padding="12dp"
-        android:isScrollContainer="true">
+        android:isScrollContainer="true"
+        android:padding="12dp">
 
         <EditText
             android:id="@+id/et_editor_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@null"
-            android:textColor="#E2E2E6"
-            android:textSize="12sp"
-            android:typeface="monospace"
             android:gravity="top|left"
             android:inputType="textMultiLine"
-            android:scrollbars="vertical" />
+            android:scrollbars="vertical"
+            android:textColor="#E2E2E6"
+            android:textSize="12sp"
+            android:typeface="monospace" />
     </ScrollView>
 </LinearLayout>

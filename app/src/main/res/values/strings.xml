@@ -1,3 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TermExplorer</string>
+    <string name="back_to_terminal">Back to terminal</string>
+    <string name="terminal_view_desc">Terminal view</string>
+    <string name="file_manager_title">Dual-Pane Explorer</string>
+    <string name="file_manager_subtitle">Tap to focus · Long-press for options</string>
+    <string name="panel_left">LEFT</string>
+    <string name="panel_right">RIGHT</string>
+    <string name="panel_left_active">LEFT · ACTIVE</string>
+    <string name="panel_right_active">RIGHT · ACTIVE</string>
+    <string name="sandbox">Sandbox</string>
+    <string name="sd_card">SD Card</string>
+    <string name="filter_hint">Filter files…</string>
+    <string name="capacity_unknown">Capacity: Unknown</string>
+    <string name="empty_directory">This folder is empty</string>
+    <string name="parent_directory">Parent folder</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_move">Move</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_new_file">File</string>
+    <string name="action_new_folder">Folder</string>
+
+    <string name="sidebar_open">Open places sidebar</string>
+    <string name="sidebar_title">Places</string>
+    <string name="sidebar_places">QUICK LOCATIONS</string>
+    <string name="sidebar_refresh">Refresh</string>
+    <string name="sidebar_swap_panels">⇄ Swap L / R</string>
+    <string name="sidebar_same_both">Both → Active path</string>
+    <string name="sidebar_target_left">Navigates: LEFT panel</string>
+    <string name="sidebar_target_right">Navigates: RIGHT panel</string>
+    <string name="sidebar_help">Places open into the currently active panel. Tap a panel first to choose the target.</string>
+    <string name="place_sandbox">Sandbox</string>
+    <string name="place_sdcard">SD Card</string>
+    <string name="place_download">Download</string>
+    <string name="place_dcim">DCIM</string>
+    <string name="place_pictures">Pictures</string>
+    <string name="place_documents">Documents</string>
+    <string name="place_movies">Movies</string>
+    <string name="place_music">Music</string>
+    <string name="place_app_files">App Files</string>
 </resources>

@@ -16,7 +16,7 @@
 extern "C" {
 
 JNIEXPORT jintArray JNICALL
-Java_com_example_terminal_Pty_create(JNIEnv *env, jclass clazz,
+Java_cn_wty5_term_terminal_Pty_create(JNIEnv *env, jobject clazz,
                                      jstring cmd_str, jstring cwd_str,
                                      jobjectArray args_array, jobjectArray envp_array) {
     // 1. Open master PTY
@@ -145,7 +145,7 @@ Java_com_example_terminal_Pty_create(JNIEnv *env, jclass clazz,
 }
 
 JNIEXPORT jint JNICALL
-Java_com_example_terminal_Pty_read(JNIEnv *env, jclass clazz, jint fd, jbyteArray buffer) {
+Java_cn_wty5_term_terminal_Pty_read(JNIEnv *env, jobject clazz, jint fd, jbyteArray buffer) {
     jbyte *buf = env->GetByteArrayElements(buffer, nullptr);
     jsize len = env->GetArrayLength(buffer);
 
@@ -156,7 +156,8 @@ Java_com_example_terminal_Pty_read(JNIEnv *env, jclass clazz, jint fd, jbyteArra
 }
 
 JNIEXPORT jint JNICALL
-Java_com_example_terminal_Pty_write(JNIEnv *env, jclass clazz, jint fd, jbyteArray buffer, jint offset, jint length) {
+Java_cn_wty5_term_terminal_Pty_write(JNIEnv *env, jobject clazz, jint fd, jbyteArray buffer,
+                                    jint offset, jint length) {
     jbyte *buf = env->GetByteArrayElements(buffer, nullptr);
 
     int written = write(fd, buf + offset, length);
@@ -166,12 +167,12 @@ Java_com_example_terminal_Pty_write(JNIEnv *env, jclass clazz, jint fd, jbyteArr
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_terminal_Pty_close(JNIEnv *env, jclass clazz, jint fd) {
+Java_cn_wty5_term_terminal_Pty_close(JNIEnv *env, jobject clazz, jint fd) {
     close(fd);
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_terminal_Pty_resize(JNIEnv *env, jclass clazz, jint fd, jint rows, jint cols) {
+Java_cn_wty5_term_terminal_Pty_resize(JNIEnv *env, jobject clazz, jint fd, jint rows, jint cols) {
     struct winsize sz;
     sz.ws_row = (unsigned short) rows;
     sz.ws_col = (unsigned short) cols;
@@ -181,7 +182,7 @@ Java_com_example_terminal_Pty_resize(JNIEnv *env, jclass clazz, jint fd, jint ro
 }
 
 JNIEXPORT jint JNICALL
-Java_com_example_terminal_Pty_waitProcess(JNIEnv *env, jclass clazz, jint pid) {
+Java_cn_wty5_term_terminal_Pty_waitProcess(JNIEnv *env, jobject clazz, jint pid) {
     int status = 0;
     pid_t res = waitpid(pid, &status, WNOHANG);
     if (res == pid) {

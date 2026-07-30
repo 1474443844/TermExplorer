@@ -1,7 +1,6 @@
 package cn.wty5.term.terminal
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import java.io.File
 import kotlin.concurrent.thread
@@ -11,8 +10,6 @@ class PtySession(
     private val context: Context,
     private val onOutput: (String) -> Unit
 ) {
-    private val filesDir: File = context.filesDir
-    private val nativeLibDir: File = File(context.applicationInfo.nativeLibraryDir)
 
     @Volatile
     private var masterFd: Int = -1
@@ -34,8 +31,6 @@ class PtySession(
             // Setup robust env variables
             val env = HashMap<String, String>(System.getenv())
 
-            val targetSdkVersion: Int = context.applicationInfo.targetSdkVersion
-
             env["TERM"] = "xterm-256color"
 
             val termDir = TermConfig.termDir
@@ -51,14 +46,22 @@ class PtySession(
 
             val bashFile = File(binDir, "bash")
 
-
             env["SHELL"] = bashFile.absolutePath
             env["PREFIX"] = termDir.absolutePath
             env["PROMPT_COMMAND"] = "history -a"
             env["PWD"] = workingDir.absolutePath
-            env["PATH"] = "${binDir.absolutePath}:${env["PATH"]}"
-            env["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${env["LD_LIBRARY_PATH"]}"
-
+            val existingPATH = env["PATH"] ?: ""
+            if (existingPATH != "") {
+                env["PATH"] = "${binDir.absolutePath}:${existingPATH}"
+            }else {
+                env["PATH"] = binDir.absolutePath
+            }
+            val existingLIB = env["LD_LIBRARY_PATH"] ?: ""
+            if (existingLIB != ""){
+                env["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${existingLIB}"
+            }else{
+                env["LD_LIBRARY_PATH"] = libDir.absolutePath
+            }
 
             val envList = mutableListOf<String>()
 

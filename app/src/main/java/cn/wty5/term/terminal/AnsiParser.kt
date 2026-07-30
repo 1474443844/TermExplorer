@@ -5,18 +5,16 @@ import android.graphics.Color
 /**
  * Stream-safe ANSI/VT parser that emits structured events.
  *
+ * One instance owns incomplete-escape carry-over and active SGR state,
+ * so multi-session / restart cannot cross-contaminate.
+ *
  * Readline-enabled bash redraws the prompt/line using sequences such as:
  *   ESC[K / ESC[0K / ESC[1K / ESC[2K   erase in line
  *   ESC[C / ESC[D / ESC[nG             cursor motion
- *   ESC[?2004h                         private modes (ignored)
- *
- * Only stripping SGR used to leave garbage like "04h", and swallowing erase
- * without applying it made deletes/redraws appear stuck.
+ *   ESC[?1049h / ESC[?1049l            alternate screen buffer
+ *   ESC[?2004h                         private modes (bracketed paste, ignored)
  */
-object AnsiParser {
-
-    private const val ESC = '\u001B'
-    private const val BEL = '\u0007'
+class AnsiParser {
 
     data class TextStyle(
         val fg: Int? = null,
@@ -47,6 +45,20 @@ object AnsiParser {
         data class DeleteChars(val n: Int) : Event()
         /** CSI n @ — insert n blank characters at cursor */
         data class InsertChars(val n: Int) : Event()
+        /** DECSET/DECRST private modes, e.g. 1049 (alt screen), 25 (cursor). */
+        data class SetPrivateMode(val modes: IntArray) : Event() {
+            override fun equals(other: Any?): Boolean =
+                other is SetPrivateMode && modes.contentEquals(other.modes)
+
+            override fun hashCode(): Int = modes.contentHashCode()
+        }
+
+        data class ResetPrivateMode(val modes: IntArray) : Event() {
+            override fun equals(other: Any?): Boolean =
+                other is ResetPrivateMode && modes.contentEquals(other.modes)
+
+            override fun hashCode(): Int = modes.contentHashCode()
+        }
     }
 
     // Incomplete escape sequence carry-over across chunked PTY reads.
@@ -75,7 +87,7 @@ object AnsiParser {
      */
     @Synchronized
     fun parseEvents(chunk: String): List<Event> {
-        val events = ArrayList<Event>()
+        val events = ArrayList<Event>(chunk.length.coerceAtMost(4096))
         val input = if (pending.isEmpty()) chunk else {
             val combined = pending.toString() + chunk
             pending.clear()
@@ -197,8 +209,6 @@ object AnsiParser {
     @Synchronized
     fun parse(chunk: String): android.text.SpannableStringBuilder {
         val ssb = android.text.SpannableStringBuilder()
-        // Snapshot style state before parseEvents mutates it, then re-apply via events.
-        // parseEvents already uses the live style machine, so just consume Text events.
         for (event in parseEvents(chunk)) {
             if (event is Event.Text) {
                 val start = ssb.length
@@ -271,11 +281,32 @@ object AnsiParser {
             'P' -> events.add(Event.DeleteChars(csiCount(params, default = 1)))
             '@' -> events.add(Event.InsertChars(csiCount(params, default = 1)))
 
-            // Private mode set/reset: ESC [ ? 2004 h/l etc. — ignore
-            'h', 'l' -> Unit
+            // DECSET / DECRST (private modes): ESC [ ? n ; n h/l
+            'h' -> {
+                if (params.startsWith('?')) {
+                    events.add(Event.SetPrivateMode(parsePrivateModes(params)))
+                }
+            }
+
+            'l' -> {
+                if (params.startsWith('?')) {
+                    events.add(Event.ResetPrivateMode(parsePrivateModes(params)))
+                }
+            }
 
             else -> Unit
         }
+    }
+
+    private fun parsePrivateModes(params: String): IntArray {
+        val cleaned = params.trimStart('?')
+        if (cleaned.isEmpty()) return IntArray(0)
+        val parts = cleaned.split(';')
+        val out = ArrayList<Int>(parts.size)
+        for (p in parts) {
+            p.toIntOrNull()?.let { out.add(it) }
+        }
+        return out.toIntArray()
     }
 
     /**
@@ -332,33 +363,33 @@ object AnsiParser {
                 22 -> isBold = false
                 24 -> isUnderline = false
 
-                30 -> textColor = Color.parseColor("#1E293B")
-                31 -> textColor = Color.parseColor("#EF4444")
-                32 -> textColor = Color.parseColor("#22C55E")
-                33 -> textColor = Color.parseColor("#EAB308")
-                34 -> textColor = Color.parseColor("#3B82F6")
-                35 -> textColor = Color.parseColor("#A855F7")
-                36 -> textColor = Color.parseColor("#06B6D4")
-                37 -> textColor = Color.parseColor("#F8FAFC")
+                30 -> textColor = ANSI_FG[0]
+                31 -> textColor = ANSI_FG[1]
+                32 -> textColor = ANSI_FG[2]
+                33 -> textColor = ANSI_FG[3]
+                34 -> textColor = ANSI_FG[4]
+                35 -> textColor = ANSI_FG[5]
+                36 -> textColor = ANSI_FG[6]
+                37 -> textColor = ANSI_FG[7]
                 39 -> textColor = null
 
-                90 -> textColor = Color.parseColor("#64748B")
-                91 -> textColor = Color.parseColor("#F87171")
-                92 -> textColor = Color.parseColor("#4ADE80")
-                93 -> textColor = Color.parseColor("#FACC15")
-                94 -> textColor = Color.parseColor("#60A5FA")
-                95 -> textColor = Color.parseColor("#C084FC")
-                96 -> textColor = Color.parseColor("#22D3EE")
-                97 -> textColor = Color.parseColor("#FFFFFF")
+                90 -> textColor = ANSI_FG_BRIGHT[0]
+                91 -> textColor = ANSI_FG_BRIGHT[1]
+                92 -> textColor = ANSI_FG_BRIGHT[2]
+                93 -> textColor = ANSI_FG_BRIGHT[3]
+                94 -> textColor = ANSI_FG_BRIGHT[4]
+                95 -> textColor = ANSI_FG_BRIGHT[5]
+                96 -> textColor = ANSI_FG_BRIGHT[6]
+                97 -> textColor = ANSI_FG_BRIGHT[7]
 
-                40 -> bgColor = Color.parseColor("#0F1113")
-                41 -> bgColor = Color.parseColor("#7F1D1D")
-                42 -> bgColor = Color.parseColor("#14532D")
-                43 -> bgColor = Color.parseColor("#713F12")
-                44 -> bgColor = Color.parseColor("#1E3A8A")
-                45 -> bgColor = Color.parseColor("#581C87")
-                46 -> bgColor = Color.parseColor("#164E63")
-                47 -> bgColor = Color.parseColor("#334155")
+                40 -> bgColor = ANSI_BG[0]
+                41 -> bgColor = ANSI_BG[1]
+                42 -> bgColor = ANSI_BG[2]
+                43 -> bgColor = ANSI_BG[3]
+                44 -> bgColor = ANSI_BG[4]
+                45 -> bgColor = ANSI_BG[5]
+                46 -> bgColor = ANSI_BG[6]
+                47 -> bgColor = ANSI_BG[7]
                 49 -> bgColor = null
 
                 38, 48 -> {
@@ -413,22 +444,58 @@ object AnsiParser {
         }
     }
 
-    private val XTERM16 = intArrayOf(
-        Color.parseColor("#000000"),
-        Color.parseColor("#CD0000"),
-        Color.parseColor("#00CD00"),
-        Color.parseColor("#CDCD00"),
-        Color.parseColor("#0000EE"),
-        Color.parseColor("#CD00CD"),
-        Color.parseColor("#00CDCD"),
-        Color.parseColor("#E5E5E5"),
-        Color.parseColor("#7F7F7F"),
-        Color.parseColor("#FF0000"),
-        Color.parseColor("#00FF00"),
-        Color.parseColor("#FFFF00"),
-        Color.parseColor("#5C5CFF"),
-        Color.parseColor("#FF00FF"),
-        Color.parseColor("#00FFFF"),
-        Color.parseColor("#FFFFFF")
-    )
+    companion object {
+        private const val ESC = '\u001B'
+        private const val BEL = '\u0007'
+
+        private val ANSI_FG = intArrayOf(
+            Color.parseColor("#1E293B"),
+            Color.parseColor("#EF4444"),
+            Color.parseColor("#22C55E"),
+            Color.parseColor("#EAB308"),
+            Color.parseColor("#3B82F6"),
+            Color.parseColor("#A855F7"),
+            Color.parseColor("#06B6D4"),
+            Color.parseColor("#F8FAFC")
+        )
+        private val ANSI_FG_BRIGHT = intArrayOf(
+            Color.parseColor("#64748B"),
+            Color.parseColor("#F87171"),
+            Color.parseColor("#4ADE80"),
+            Color.parseColor("#FACC15"),
+            Color.parseColor("#60A5FA"),
+            Color.parseColor("#C084FC"),
+            Color.parseColor("#22D3EE"),
+            Color.parseColor("#FFFFFF")
+        )
+        private val ANSI_BG = intArrayOf(
+            Color.parseColor("#0F1113"),
+            Color.parseColor("#7F1D1D"),
+            Color.parseColor("#14532D"),
+            Color.parseColor("#713F12"),
+            Color.parseColor("#1E3A8A"),
+            Color.parseColor("#581C87"),
+            Color.parseColor("#164E63"),
+            Color.parseColor("#334155")
+        )
+
+        private val XTERM16 = intArrayOf(
+            Color.parseColor("#000000"),
+            Color.parseColor("#CD0000"),
+            Color.parseColor("#00CD00"),
+            Color.parseColor("#CDCD00"),
+            Color.parseColor("#0000EE"),
+            Color.parseColor("#CD00CD"),
+            Color.parseColor("#00CDCD"),
+            Color.parseColor("#E5E5E5"),
+            Color.parseColor("#7F7F7F"),
+            Color.parseColor("#FF0000"),
+            Color.parseColor("#00FF00"),
+            Color.parseColor("#FFFF00"),
+            Color.parseColor("#5C5CFF"),
+            Color.parseColor("#FF00FF"),
+            Color.parseColor("#00FFFF"),
+            Color.parseColor("#FFFFFF")
+        )
+    }
 }

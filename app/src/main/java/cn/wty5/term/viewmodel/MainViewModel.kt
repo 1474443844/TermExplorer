@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import cn.wty5.term.terminal.AnsiParser
 import cn.wty5.term.terminal.CoreutilsManager
 import cn.wty5.term.terminal.PtySession
 import cn.wty5.term.terminal.TermConfig
@@ -33,10 +32,12 @@ class MainViewModel(
     /**
      * Hot path: PTY reader threads call [appendOutput] frequently.
      * Buffered SharedFlow + [tryEmit] avoids spawning a coroutine per chunk.
+     * No replay — the View owns the rendered buffer; replaying would re-parse
+     * history into a fresh TerminalView and corrupt the screen.
      */
     private val _terminalOutputFlow = MutableSharedFlow<String>(
-        replay = 8,
-        extraBufferCapacity = 128,
+        replay = 0,
+        extraBufferCapacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     val terminalOutputFlow: SharedFlow<String> = _terminalOutputFlow.asSharedFlow()
@@ -74,7 +75,7 @@ class MainViewModel(
     fun restartSession() {
         ptySession?.destroy()
         ptySession = null
-        AnsiParser.reset()
+        // AnsiParser lives on TerminalView now; MainActivity clears the view.
         setupPtySession()
     }
 

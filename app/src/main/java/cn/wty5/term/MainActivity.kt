@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btn_key_ss).setOnClickListener {
             viewModel.restartSession()
+            terminalView.resetForNewSession()
             Toast.makeText(this, "Terminal Session switched/restarted!", Toast.LENGTH_SHORT).show()
             terminalView.focusTerminal()
         }

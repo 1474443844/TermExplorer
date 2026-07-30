@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.TextPaint
 import android.util.AttributeSet
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -30,6 +31,7 @@ import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import cn.wty5.term.terminal.AnsiParser
+import java.util.ArrayDeque
 
 class TerminalView @JvmOverloads constructor(
     context: Context,
@@ -48,23 +50,68 @@ class TerminalView @JvmOverloads constructor(
         val isBold: Boolean,
         val isUnderline: Boolean,
         val isFullWidth: Boolean = false,
-        val isPlaceholder: Boolean = false
+        val isPlaceholder: Boolean = false,
+        /** Low surrogate for supplementary-plane glyphs (emoji); 0 if none. */
+        val lowSurrogate: Char = 0.toChar()
     )
 
     private fun isFullWidth(c: Char): Boolean {
         val code = c.code
-        return (code in 0x4E00..0x9FFF) ||
-                (code in 0x3400..0x4DBF) ||
-                (code in 0x20000..0x2A6DF) ||
+        // CJK + fullwidth forms + Hangul + kana + common symbols that occupy 2 cells
+        return (code in 0x1100..0x115F) || // Hangul Jamo
+                (code in 0x2E80..0xA4CF) || // CJK radicals / CJK / Yi
+                (code in 0xAC00..0xD7A3) || // Hangul syllables
+                (code in 0xF900..0xFAFF) || // CJK compatibility
+                (code in 0xFE10..0xFE19) ||
+                (code in 0xFE30..0xFE6F) ||
+                (code in 0xFF00..0xFF60) ||
+                (code in 0xFFE0..0xFFE6) ||
                 (code in 0x3000..0x303F) ||
-                (code in 0xFF00..0xFFEF) ||
-                (code in 0x3040..0x309F) ||
-                (code in 0x30A0..0x30FF) ||
-                (code in 0xAC00..0xD7AF)
+                Character.isSurrogate(c) // emoji / astral plane — pair handled in putChar
     }
 
-    private val defaultFg = Color.parseColor("#E2E2E6")
-    private val defaultBg = Color.parseColor("#000000")
+    /** East-Asian / emoji width for a Unicode code point (not a single Char). */
+    private fun isFullWidthCodePoint(cp: Int): Boolean {
+        if (cp <= 0xFFFF) return isFullWidth(cp.toChar())
+        // Common emoji / symbols ranges (not exhaustive, covers everyday use)
+        return (cp in 0x1F000..0x1FAFF) || // emoji, symbols
+                (cp in 0x20000..0x3FFFD) || // CJK Ext B+
+                (cp in 0x1B000..0x1B0FF) // Kana supplement
+    }
+
+    private val defaultFg = COLOR_DEFAULT_FG
+    private val defaultBg = COLOR_DEFAULT_BG
+
+    /** Per-view ANSI parser (incomplete escape + SGR state). */
+    private val ansiParser = AnsiParser()
+
+    // Frame-batched PTY output: accumulate chunks, drain once per vsync.
+    private val pendingChunks = ArrayDeque<String>()
+    private val pendingLock = Any()
+    private var frameCallbackPending = false
+    private val frameCallback = Choreographer.FrameCallback {
+        frameCallbackPending = false
+        drainPendingOutput()
+    }
+
+    // Cached paints / geometry used by onDraw hot path.
+    private val drawCharBuf = CharArray(1)
+    private val drawPairBuf = CharArray(2)
+    private val leftHandlePath = Path()
+    private val rightHandlePath = Path()
+    private val cursorColor = COLOR_CURSOR
+
+    // Precomputed selection bounds for the current frame (null = none).
+    private var selMin: TerminalPosition? = null
+    private var selMax: TerminalPosition? = null
+
+    // Alternate screen buffer (DECSET 1049 / 47 / 1047).
+    private var altScreenActive = false
+    private var mainLines: ArrayList<VisualLine>? = null
+    private var mainCursorRow = 0
+    private var mainCursorCol = 0
+    private var mainFirstVisible = 0
+    private var cursorHiddenByMode = false
 
     class VisualLine(
         val chars: MutableList<StyledChar> = ArrayList(),
@@ -97,12 +144,12 @@ class TerminalView @JvmOverloads constructor(
     }
     private val selectionPaint = Paint().apply {
         style = Paint.Style.FILL
-        color = Color.parseColor("#4285F4")
+        color = COLOR_SELECTION
         alpha = 100
     }
     private val handlePaint = Paint().apply {
         style = Paint.Style.FILL
-        color = Color.parseColor("#4285F4")
+        color = COLOR_SELECTION
         isAntiAlias = true
     }
 
@@ -344,176 +391,219 @@ class TerminalView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Draw solid background
         canvas.drawColor(defaultBg)
 
         val maxVisibleLines = getVisibleLineCount()
         val startLine = firstVisibleLine
         val endLine = (startLine + maxVisibleLines).coerceAtMost(lines.size)
-
         val textBaseline = -fm.top
+        val chW = charWidth
+        val chH = charHeight
+        val padL = paddingLeft.toFloat()
+        val padT = paddingTop
+
+        // Snapshot selection once per frame.
+        recomputeSelectionBounds()
+        val sMin = selMin
+        val sMax = selMax
+        val hasSel = sMin != null && sMax != null
 
         for (lineIdx in startLine until endLine) {
             val line = lines[lineIdx].chars
-            val screenY = paddingTop + (lineIdx - startLine) * charHeight
+            val screenY = padT + (lineIdx - startLine) * chH
+            val yTop = screenY.toFloat()
+            val yBot = (screenY + chH).toFloat()
+            val textY = (screenY + textBaseline).toFloat()
 
-            for (colIdx in 0 until line.size) {
+            // Per-row selection column range (inclusive), or -1/-1 if none.
+            var selFrom = -1
+            var selTo = -1
+            if (hasSel) {
+                val minR = sMin!!.row
+                val maxR = sMax!!.row
+                if (lineIdx in minR..maxR) {
+                    selFrom = if (lineIdx == minR) sMin.col else 0
+                    selTo = if (lineIdx == maxR) sMax.col else Int.MAX_VALUE
+                }
+            }
+
+            // Run-length draw: merge adjacent cells with identical style.
+            var colIdx = 0
+            val lineSize = line.size
+            while (colIdx < lineSize) {
                 val sc = line[colIdx]
-                val screenX = paddingLeft + colIdx * charWidth
+                if (sc.isPlaceholder) {
+                    // Placeholder cell for full-width glyph — background only if selected.
+                    val screenX = padL + colIdx * chW
+                    if (selFrom >= 0 && colIdx in selFrom..selTo) {
+                        canvas.drawRect(screenX, yTop, screenX + chW, yBot, selectionPaint)
+                    } else if (sc.bgColor != defaultBg) {
+                        bgPaint.color = sc.bgColor
+                        canvas.drawRect(screenX, yTop, screenX + chW, yBot, bgPaint)
+                    }
+                    colIdx++
+                    continue
+                }
 
-                // Determine if selected
-                var isCharSelected = false
-                val selStart = selectionStart
-                val selEnd = selectionEnd
-                if (selStart != null && selEnd != null) {
-                    val maxRow = lines.size - 1
-                    if (maxRow >= 0) {
-                        val startRowCoerced = selStart.row.coerceIn(0, maxRow)
-                        val startColCoerced =
-                            selStart.col.coerceIn(0, lines[startRowCoerced].chars.size)
-                        val endRowCoerced = selEnd.row.coerceIn(0, maxRow)
-                        val endColCoerced = selEnd.col.coerceIn(0, lines[endRowCoerced].chars.size)
+                val runFg = sc.fgColor
+                val runBg = sc.bgColor
+                val runBold = sc.isBold
+                val runUnderline = sc.isUnderline
+                val runStart = colIdx
+                var runCols = if (sc.isFullWidth) 2 else 1
+                var next = colIdx + runCols
+                // Extend run while style matches and selection state is uniform.
+                while (next < lineSize) {
+                    val nsc = line[next]
+                    if (nsc.isPlaceholder) break
+                    if (nsc.fgColor != runFg || nsc.bgColor != runBg ||
+                        nsc.isBold != runBold || nsc.isUnderline != runUnderline
+                    ) break
+                    val nCols = if (nsc.isFullWidth) 2 else 1
+                    // Selection must be uniform across the whole run for bg paint.
+                    val thisSel = selFrom >= 0 && runStart in selFrom..selTo
+                    val nextSel = selFrom >= 0 && next in selFrom..selTo
+                    if (thisSel != nextSel) break
+                    runCols += nCols
+                    next += nCols
+                }
 
-                        val sPos = TerminalPosition(startRowCoerced, startColCoerced)
-                        val ePos = TerminalPosition(endRowCoerced, endColCoerced)
+                val screenX = padL + runStart * chW
+                val runWidth = runCols * chW
+                val runSelected = selFrom >= 0 && runStart in selFrom..selTo
 
-                        val minPos = if (sPos < ePos) sPos else ePos
-                        val maxPos = if (sPos < ePos) ePos else sPos
+                if (runSelected) {
+                    canvas.drawRect(screenX, yTop, screenX + runWidth, yBot, selectionPaint)
+                } else if (runBg != defaultBg) {
+                    bgPaint.color = runBg
+                    canvas.drawRect(screenX, yTop, screenX + runWidth, yBot, bgPaint)
+                }
 
-                        val currentPos = TerminalPosition(lineIdx, colIdx)
-                        if (currentPos >= minPos && currentPos <= maxPos) {
-                            isCharSelected = true
+                // Draw glyphs one-by-one (monospace; full-width uses 2 cells).
+                // Single-char drawText avoids CharArray alloc via reusable buffer.
+                textPaint.color = runFg
+                textPaint.isFakeBoldText = runBold
+                textPaint.isUnderlineText = runUnderline
+                var drawCol = runStart
+                while (drawCol < next) {
+                    val cell = line[drawCol]
+                    if (!cell.isPlaceholder) {
+                        if (cell.lowSurrogate.code != 0) {
+                            drawPairBuf[0] = cell.char
+                            drawPairBuf[1] = cell.lowSurrogate
+                            canvas.drawText(
+                                drawPairBuf,
+                                0,
+                                2,
+                                padL + drawCol * chW,
+                                textY,
+                                textPaint
+                            )
+                        } else {
+                            drawCharBuf[0] = cell.char
+                            canvas.drawText(
+                                drawCharBuf,
+                                0,
+                                1,
+                                padL + drawCol * chW,
+                                textY,
+                                textPaint
+                            )
                         }
+                        drawCol += if (cell.isFullWidth) 2 else 1
+                    } else {
+                        drawCol++
                     }
                 }
-
-                // Draw non-default background or selection highlight if exists
-                if (isCharSelected) {
-                    canvas.drawRect(
-                        screenX,
-                        screenY.toFloat(),
-                        screenX + charWidth,
-                        (screenY + charHeight).toFloat(),
-                        selectionPaint
-                    )
-                } else if (sc.bgColor != defaultBg) {
-                    bgPaint.color = sc.bgColor
-                    canvas.drawRect(
-                        screenX,
-                        screenY.toFloat(),
-                        screenX + charWidth,
-                        (screenY + charHeight).toFloat(),
-                        bgPaint
-                    )
-                }
-
-                // Draw character
-                if (!sc.isPlaceholder) {
-                    textPaint.color = sc.fgColor
-                    textPaint.isFakeBoldText = sc.isBold
-                    textPaint.isUnderlineText = sc.isUnderline
-                    canvas.drawText(
-                        charArrayOf(sc.char),
-                        0,
-                        1,
-                        screenX,
-                        (screenY + textBaseline).toFloat(),
-                        textPaint
-                    )
-                }
+                colIdx = next
             }
         }
 
-        // Draw cursor
-        if (cursorVisible && cursorRow >= startLine && cursorRow < endLine) {
+        // Cursor
+        val showCursor = cursorVisible && !cursorHiddenByMode
+        if (showCursor && cursorRow >= startLine && cursorRow < endLine) {
             val isCursorFullWidth =
                 if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {
                     lines[cursorRow].chars[cursorCol].isFullWidth
                 } else {
                     false
                 }
-            val cursorWidth = if (isCursorFullWidth) 2 * charWidth else charWidth
-            val screenX = paddingLeft + cursorCol * charWidth
-            val screenY = paddingTop + (cursorRow - startLine) * charHeight
+            val cursorWidth = if (isCursorFullWidth) 2 * chW else chW
+            val screenX = padL + cursorCol * chW
+            val screenY = padT + (cursorRow - startLine) * chH
 
-            cursorPaint.color = Color.parseColor("#A8C7FA")
+            cursorPaint.color = cursorColor
             cursorPaint.alpha = 180
             canvas.drawRect(
                 screenX,
                 screenY.toFloat(),
                 screenX + cursorWidth,
-                (screenY + charHeight).toFloat(),
+                (screenY + chH).toFloat(),
                 cursorPaint
             )
 
-            // Draw inverse text under cursor if any
             if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {
                 val sc = lines[cursorRow].chars[cursorCol]
                 if (!sc.isPlaceholder) {
-                    textPaint.color = Color.parseColor("#000000")
+                    textPaint.color = Color.BLACK
                     textPaint.isFakeBoldText = sc.isBold
                     textPaint.isUnderlineText = sc.isUnderline
-                    canvas.drawText(
-                        charArrayOf(sc.char),
-                        0,
-                        1,
-                        screenX,
-                        (screenY + textBaseline).toFloat(),
-                        textPaint
-                    )
+                    if (sc.lowSurrogate.code != 0) {
+                        drawPairBuf[0] = sc.char
+                        drawPairBuf[1] = sc.lowSurrogate
+                        canvas.drawText(
+                            drawPairBuf,
+                            0,
+                            2,
+                            screenX,
+                            (screenY + textBaseline).toFloat(),
+                            textPaint
+                        )
+                    } else {
+                        drawCharBuf[0] = sc.char
+                        canvas.drawText(
+                            drawCharBuf,
+                            0,
+                            1,
+                            screenX,
+                            (screenY + textBaseline).toFloat(),
+                            textPaint
+                        )
+                    }
                 }
             }
         }
 
-        // Draw selection handles
-        val selStart = selectionStart
-        val selEnd = selectionEnd
-        if (isSelecting && selStart != null && selEnd != null) {
+        // Selection handles (reuse Path instances)
+        if (isSelecting && sMin != null && sMax != null) {
             val r = dpToPx(12f)
 
-            val minPos = if (selStart < selEnd) selStart else selEnd
-            val maxPos = if (selStart < selEnd) selEnd else selStart
-
-            // Draw Left Handle (Tip pointing to top-right)
-            if (minPos.row >= startLine && minPos.row < endLine) {
-                val leftTipX = paddingLeft + minPos.col * charWidth
-                val leftTipY = (paddingTop + (minPos.row - startLine + 1) * charHeight).toFloat()
-
+            if (sMin.row >= startLine && sMin.row < endLine) {
+                val leftTipX = padL + sMin.col * chW
+                val leftTipY = (padT + (sMin.row - startLine + 1) * chH).toFloat()
                 val cx = leftTipX - r
                 val cy = leftTipY + r
-
-                // Draw circle
                 canvas.drawCircle(cx, cy, r, handlePaint)
-
-                // Draw triangle connecting the tip at (leftTipX, leftTipY) to the circle
-                val path = Path().apply {
-                    moveTo(leftTipX, leftTipY)
-                    lineTo(leftTipX - r, leftTipY)
-                    lineTo(leftTipX, leftTipY + r)
-                    close()
-                }
-                canvas.drawPath(path, handlePaint)
+                leftHandlePath.rewind()
+                leftHandlePath.moveTo(leftTipX, leftTipY)
+                leftHandlePath.lineTo(leftTipX - r, leftTipY)
+                leftHandlePath.lineTo(leftTipX, leftTipY + r)
+                leftHandlePath.close()
+                canvas.drawPath(leftHandlePath, handlePaint)
             }
 
-            // Draw Right Handle (Tip pointing to top-left)
-            if (maxPos.row >= startLine && maxPos.row < endLine) {
-                val rightTipX = paddingLeft + (maxPos.col + 1) * charWidth
-                val rightTipY = (paddingTop + (maxPos.row - startLine + 1) * charHeight).toFloat()
-
+            if (sMax.row >= startLine && sMax.row < endLine) {
+                val rightTipX = padL + (sMax.col + 1) * chW
+                val rightTipY = (padT + (sMax.row - startLine + 1) * chH).toFloat()
                 val cx = rightTipX + r
                 val cy = rightTipY + r
-
-                // Draw circle
                 canvas.drawCircle(cx, cy, r, handlePaint)
-
-                // Draw triangle connecting the tip at (rightTipX, rightTipY) to the circle
-                val path = Path().apply {
-                    moveTo(rightTipX, rightTipY)
-                    lineTo(rightTipX + r, rightTipY)
-                    lineTo(rightTipX, rightTipY + r)
-                    close()
-                }
-                canvas.drawPath(path, handlePaint)
+                rightHandlePath.rewind()
+                rightHandlePath.moveTo(rightTipX, rightTipY)
+                rightHandlePath.lineTo(rightTipX + r, rightTipY)
+                rightHandlePath.lineTo(rightTipX, rightTipY + r)
+                rightHandlePath.close()
+                canvas.drawPath(rightHandlePath, handlePaint)
             }
         }
     }
@@ -821,133 +911,266 @@ class TerminalView @JvmOverloads constructor(
     }
 
     fun appendOutput(ansiText: String) {
-        post {
-            val events = AnsiParser.parseEvents(ansiText)
+        if (ansiText.isEmpty()) return
+        synchronized(pendingLock) {
+            pendingChunks.addLast(ansiText)
+            if (!frameCallbackPending) {
+                frameCallbackPending = true
+                Choreographer.getInstance().postFrameCallback(frameCallback)
+            }
+        }
+    }
 
-            // Readline history redraw often does: CR + rewrite shorter text [+ ESC[K].
-            // If EL is missing (some bash builds), a short rewrite leaves the tail of the
-            // previous long command visible ("ls" over "curl ..." → "lsrl ...").
-            // Track CR-then-text without EL and truncate to the cursor at batch end.
-            var sawCr = false
-            var wroteAfterCr = false
-            var erasedAfterCr = false
+    /** Drain all chunks queued since the last frame and apply them in one pass. */
+    private fun drainPendingOutput() {
+        val batch: ArrayList<String>
+        synchronized(pendingLock) {
+            if (pendingChunks.isEmpty()) return
+            batch = ArrayList(pendingChunks.size)
+            while (pendingChunks.isNotEmpty()) {
+                batch.add(pendingChunks.removeFirst())
+            }
+        }
+        // Concatenate small chunks to cut parseEvents overhead.
+        val combined = if (batch.size == 1) {
+            batch[0]
+        } else {
+            val sb = StringBuilder(batch.sumOf { it.length })
+            for (c in batch) sb.append(c)
+            sb.toString()
+        }
+        applyOutputChunk(combined)
+    }
 
-            for (event in events) {
-                when (event) {
-                    is AnsiParser.Event.Text -> {
-                        putChar(event.char, event.style)
-                        if (sawCr) wroteAfterCr = true
-                    }
+    private fun applyOutputChunk(ansiText: String) {
+        val events = ansiParser.parseEvents(ansiText)
 
-                    is AnsiParser.Event.NewLine -> {
-                        if (cursorRow < lines.size) {
-                            lines[cursorRow].isSoftWrapped = false
+        // Readline history redraw often does: CR + rewrite shorter text [+ ESC[K].
+        var sawCr = false
+        var wroteAfterCr = false
+        var erasedAfterCr = false
+        // High-surrogate holdover for multi-chunk UTF-16 pairs (rare after PTY UTF-8 decode).
+        var pendingHigh: Char? = null
+
+        for (event in events) {
+            when (event) {
+                is AnsiParser.Event.Text -> {
+                    val ch = event.char
+                    val high = pendingHigh
+                    if (high != null) {
+                        pendingHigh = null
+                        if (Character.isLowSurrogate(ch)) {
+                            val cp = Character.toCodePoint(high, ch)
+                            putCodePoint(cp, event.style)
+                        } else {
+                            putChar(high, event.style)
+                            if (Character.isHighSurrogate(ch)) {
+                                pendingHigh = ch
+                            } else {
+                                putChar(ch, event.style)
+                            }
                         }
-                        // Finishing the line: any pending CR redraw is complete.
-                        if (sawCr && wroteAfterCr && !erasedAfterCr) {
-                            eraseInLine(0)
+                    } else if (Character.isHighSurrogate(ch)) {
+                        pendingHigh = ch
+                    } else {
+                        putChar(ch, event.style)
+                    }
+                    if (sawCr) wroteAfterCr = true
+                }
+
+                is AnsiParser.Event.NewLine -> {
+                    if (cursorRow < lines.size) {
+                        lines[cursorRow].isSoftWrapped = false
+                    }
+                    if (sawCr && wroteAfterCr && !erasedAfterCr) {
+                        eraseInLine(0)
+                    }
+                    sawCr = false
+                    wroteAfterCr = false
+                    erasedAfterCr = false
+                    cursorRow++
+                    cursorCol = 0
+                    ensureLine(cursorRow)
+                }
+
+                is AnsiParser.Event.CarriageReturn -> {
+                    if (sawCr && wroteAfterCr && !erasedAfterCr) {
+                        eraseInLine(0)
+                    }
+                    cursorCol = 0
+                    sawCr = true
+                    wroteAfterCr = false
+                    erasedAfterCr = false
+                }
+
+                is AnsiParser.Event.Backspace -> {
+                    moveCursorBack(1)
+                }
+
+                is AnsiParser.Event.Tab -> {
+                    val next = ((cursorCol / 8) + 1) * 8
+                    cursorCol = next.coerceAtMost((currentCols - 1).coerceAtLeast(0))
+                }
+
+                is AnsiParser.Event.CursorUp -> {
+                    cursorRow = (cursorRow - event.n).coerceAtLeast(0)
+                    ensureLine(cursorRow)
+                }
+
+                is AnsiParser.Event.CursorDown -> {
+                    cursorRow += event.n
+                    ensureLine(cursorRow)
+                }
+
+                is AnsiParser.Event.CursorForward -> {
+                    cursorCol = (cursorCol + event.n).coerceAtMost(currentCols)
+                }
+
+                is AnsiParser.Event.CursorBack -> {
+                    moveCursorBack(event.n)
+                }
+
+                is AnsiParser.Event.CursorHorizontalAbsolute -> {
+                    cursorCol = (event.col - 1).coerceIn(0, currentCols)
+                }
+
+                is AnsiParser.Event.CursorPosition -> {
+                    val origin = if (altScreenActive) {
+                        0
+                    } else {
+                        (lines.size - currentRows).coerceAtLeast(0)
+                    }
+                    cursorRow = (origin + event.row - 1).coerceAtLeast(0)
+                    cursorCol = (event.col - 1).coerceIn(0, currentCols)
+                    ensureLine(cursorRow)
+                }
+
+                is AnsiParser.Event.EraseInLine -> {
+                    eraseInLine(event.mode)
+                    if (sawCr) erasedAfterCr = true
+                }
+
+                is AnsiParser.Event.EraseInDisplay -> {
+                    eraseInDisplay(event.mode)
+                    if (sawCr) erasedAfterCr = true
+                }
+
+                is AnsiParser.Event.EraseChars -> {
+                    eraseChars(event.n)
+                    if (sawCr) erasedAfterCr = true
+                }
+
+                is AnsiParser.Event.DeleteChars -> {
+                    deleteChars(event.n)
+                    if (sawCr) erasedAfterCr = true
+                }
+
+                is AnsiParser.Event.InsertChars -> {
+                    insertChars(event.n)
+                }
+
+                is AnsiParser.Event.SetPrivateMode -> {
+                    for (mode in event.modes) {
+                        when (mode) {
+                            1049, 1047, 47 -> enterAltScreen(clear = mode != 1047)
+                            25 -> cursorHiddenByMode = false
+                            2004 -> Unit // bracketed paste — ignored
                         }
-                        sawCr = false
-                        wroteAfterCr = false
-                        erasedAfterCr = false
-                        cursorRow++
-                        cursorCol = 0
-                        ensureLine(cursorRow)
                     }
+                }
 
-                    is AnsiParser.Event.CarriageReturn -> {
-                        // If a previous CR-rewrite in this same batch never got EL,
-                        // finish it before starting a new one.
-                        if (sawCr && wroteAfterCr && !erasedAfterCr) {
-                            eraseInLine(0)
+                is AnsiParser.Event.ResetPrivateMode -> {
+                    for (mode in event.modes) {
+                        when (mode) {
+                            1049, 1047, 47 -> leaveAltScreen()
+                            25 -> cursorHiddenByMode = true
+                            2004 -> Unit
                         }
-                        cursorCol = 0
-                        sawCr = true
-                        wroteAfterCr = false
-                        erasedAfterCr = false
-                    }
-
-                    is AnsiParser.Event.Backspace -> {
-                        moveCursorBack(1)
-                    }
-
-                    is AnsiParser.Event.Tab -> {
-                        // Advance to next 8-column tab stop
-                        val next = ((cursorCol / 8) + 1) * 8
-                        cursorCol = next.coerceAtMost((currentCols - 1).coerceAtLeast(0))
-                    }
-
-                    is AnsiParser.Event.CursorUp -> {
-                        cursorRow = (cursorRow - event.n).coerceAtLeast(0)
-                        ensureLine(cursorRow)
-                    }
-
-                    is AnsiParser.Event.CursorDown -> {
-                        cursorRow += event.n
-                        ensureLine(cursorRow)
-                    }
-
-                    is AnsiParser.Event.CursorForward -> {
-                        cursorCol = (cursorCol + event.n).coerceAtMost(currentCols)
-                    }
-
-                    is AnsiParser.Event.CursorBack -> {
-                        moveCursorBack(event.n)
-                    }
-
-                    is AnsiParser.Event.CursorHorizontalAbsolute -> {
-                        // CSI n G is 1-based
-                        cursorCol = (event.col - 1).coerceIn(0, currentCols)
-                    }
-
-                    is AnsiParser.Event.CursorPosition -> {
-                        // Map 1-based row onto the last currentRows lines when possible.
-                        val origin = (lines.size - currentRows).coerceAtLeast(0)
-                        cursorRow = (origin + event.row - 1).coerceAtLeast(0)
-                        cursorCol = (event.col - 1).coerceIn(0, currentCols)
-                        ensureLine(cursorRow)
-                    }
-
-                    is AnsiParser.Event.EraseInLine -> {
-                        eraseInLine(event.mode)
-                        if (sawCr) erasedAfterCr = true
-                    }
-
-                    is AnsiParser.Event.EraseInDisplay -> {
-                        eraseInDisplay(event.mode)
-                        if (sawCr) erasedAfterCr = true
-                    }
-
-                    is AnsiParser.Event.EraseChars -> {
-                        eraseChars(event.n)
-                        if (sawCr) erasedAfterCr = true
-                    }
-
-                    is AnsiParser.Event.DeleteChars -> {
-                        deleteChars(event.n)
-                        if (sawCr) erasedAfterCr = true
-                    }
-
-                    is AnsiParser.Event.InsertChars -> {
-                        insertChars(event.n)
                     }
                 }
             }
-
-            // CR + shorter rewrite without EL in this chunk (common with readline).
-            if (sawCr && wroteAfterCr && !erasedAfterCr) {
-                eraseInLine(0)
-            }
-
-            // Cap the scrollback list size to 2000 lines
-            while (lines.size > 2000) {
-                lines.removeAt(0)
-                cursorRow--
-            }
-            if (cursorRow < 0) cursorRow = 0
-
-            scrollToBottom()
         }
+        if (pendingHigh != null) {
+            // Lone high surrogate at chunk end — drop; next chunk may complete it.
+            // Keep it only if we want fidelity; safest is to render replacement.
+            putChar(pendingHigh, AnsiParser.TextStyle())
+        }
+
+        if (sawCr && wroteAfterCr && !erasedAfterCr) {
+            eraseInLine(0)
+        }
+
+        trimScrollback()
+        scrollToBottom()
+    }
+
+    private fun trimScrollback() {
+        val max = if (altScreenActive) {
+            // Alt screen is roughly the viewport; keep a small cushion.
+            (currentRows * 2).coerceAtLeast(currentRows + 2)
+        } else {
+            MAX_SCROLLBACK_LINES
+        }
+        val excess = lines.size - max
+        if (excess <= 0) return
+        // Bulk remove from the front (ArrayList.removeRange via subList.clear).
+        lines.subList(0, excess).clear()
+        cursorRow = (cursorRow - excess).coerceAtLeast(0)
+        firstVisibleLine = (firstVisibleLine - excess).coerceAtLeast(0)
+        // Adjust selection if any.
+        selectionStart = selectionStart?.let {
+            TerminalPosition((it.row - excess).coerceAtLeast(0), it.col)
+        }
+        selectionEnd = selectionEnd?.let {
+            TerminalPosition((it.row - excess).coerceAtLeast(0), it.col)
+        }
+    }
+
+    private fun enterAltScreen(clear: Boolean) {
+        if (altScreenActive) {
+            if (clear) {
+                lines.clear()
+                lines.add(VisualLine())
+                cursorRow = 0
+                cursorCol = 0
+                firstVisibleLine = 0
+            }
+            return
+        }
+        // Snapshot main buffer.
+        mainLines = ArrayList(lines.map { vl ->
+            VisualLine(ArrayList(vl.chars), vl.isSoftWrapped)
+        })
+        mainCursorRow = cursorRow
+        mainCursorCol = cursorCol
+        mainFirstVisible = firstVisibleLine
+        altScreenActive = true
+        lines.clear()
+        lines.add(VisualLine())
+        cursorRow = 0
+        cursorCol = 0
+        firstVisibleLine = 0
+        clearSelection()
+    }
+
+    private fun leaveAltScreen() {
+        if (!altScreenActive) return
+        val saved = mainLines
+        altScreenActive = false
+        mainLines = null
+        lines.clear()
+        if (saved != null && saved.isNotEmpty()) {
+            lines.addAll(saved)
+            cursorRow = mainCursorRow.coerceIn(0, lines.size - 1)
+            cursorCol = mainCursorCol
+            firstVisibleLine = mainFirstVisible.coerceAtLeast(0)
+        } else {
+            lines.add(VisualLine())
+            cursorRow = 0
+            cursorCol = 0
+            firstVisibleLine = 0
+        }
+        clearSelection()
     }
 
     private fun ensureLine(row: Int) {
@@ -1079,7 +1302,7 @@ class TerminalView @JvmOverloads constructor(
             // From start of screen to cursor
             1 -> {
                 eraseInLine(1)
-                val origin = (lines.size - currentRows).coerceAtLeast(0)
+                val origin = if (altScreenActive) 0 else (lines.size - currentRows).coerceAtLeast(0)
                 for (r in origin until cursorRow) {
                     if (r < lines.size) {
                         lines[r].chars.clear()
@@ -1088,9 +1311,20 @@ class TerminalView @JvmOverloads constructor(
             }
             // Entire screen
             2 -> {
-                val origin = (lines.size - currentRows).coerceAtLeast(0)
-                for (r in origin until lines.size) {
-                    lines[r].chars.clear()
+                if (altScreenActive) {
+                    for (r in lines.indices) {
+                        lines[r].chars.clear()
+                    }
+                    // Ensure at least viewport rows exist.
+                    while (lines.size < currentRows) {
+                        lines.add(VisualLine())
+                    }
+                    cursorRow = cursorRow.coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+                } else {
+                    val origin = (lines.size - currentRows).coerceAtLeast(0)
+                    for (r in origin until lines.size) {
+                        lines[r].chars.clear()
+                    }
                 }
             }
             // Entire screen + scrollback
@@ -1104,11 +1338,28 @@ class TerminalView @JvmOverloads constructor(
         }
     }
 
+    private fun putCodePoint(cp: Int, style: AnsiParser.TextStyle) {
+        val isFull = isFullWidthCodePoint(cp)
+        if (cp > 0xFFFF) {
+            val chars = Character.toChars(cp)
+            putCell(chars[0], style, isFull, lowSurrogate = chars[1])
+        } else {
+            putCell(cp.toChar(), style, isFull)
+        }
+    }
+
     private fun putChar(c: Char, style: AnsiParser.TextStyle) {
-        val isFull = isFullWidth(c)
+        putCell(c, style, isFullWidth(c))
+    }
+
+    private fun putCell(
+        c: Char,
+        style: AnsiParser.TextStyle,
+        isFull: Boolean,
+        lowSurrogate: Char = 0.toChar()
+    ) {
         val charCols = if (isFull) 2 else 1
 
-        // Auto-wrap: if we reach or exceed the column limit of the terminal view
         if (cursorCol + charCols > currentCols) {
             if (cursorRow < lines.size) {
                 lines[cursorRow].isSoftWrapped = true
@@ -1135,7 +1386,8 @@ class TerminalView @JvmOverloads constructor(
             isBold,
             isUnderline,
             isFullWidth = isFull,
-            isPlaceholder = false
+            isPlaceholder = false,
+            lowSurrogate = lowSurrogate
         )
         if (cursorCol < line.size) {
             line[cursorCol] = styledChar
@@ -1173,12 +1425,37 @@ class TerminalView @JvmOverloads constructor(
         post {
             clearSelection()
             dismissSelectionMenu()
-            AnsiParser.reset()
+            ansiParser.reset()
+            // Drop alt screen if active — full reset.
+            altScreenActive = false
+            mainLines = null
             lines.clear()
             lines.add(VisualLine())
             cursorRow = 0
             cursorCol = 0
             firstVisibleLine = 0
+            cursorHiddenByMode = false
+            invalidate()
+        }
+    }
+
+    /** Reset parser + buffers when the shell session is restarted. */
+    fun resetForNewSession() {
+        post {
+            clearSelection()
+            dismissSelectionMenu()
+            ansiParser.reset()
+            altScreenActive = false
+            mainLines = null
+            lines.clear()
+            lines.add(VisualLine())
+            cursorRow = 0
+            cursorCol = 0
+            firstVisibleLine = 0
+            cursorHiddenByMode = false
+            synchronized(pendingLock) {
+                pendingChunks.clear()
+            }
             invalidate()
         }
     }
@@ -1228,6 +1505,9 @@ class TerminalView @JvmOverloads constructor(
                     val sc = line.chars[c]
                     if (!sc.isPlaceholder) {
                         sb.append(sc.char)
+                        if (sc.lowSurrogate.code != 0) {
+                            sb.append(sc.lowSurrogate)
+                        }
                     }
                 }
             }
@@ -1404,6 +1684,32 @@ class TerminalView @JvmOverloads constructor(
         selectionPopup = null
     }
 
+    private fun recomputeSelectionBounds() {
+        val selStart = selectionStart
+        val selEnd = selectionEnd
+        if (!isSelecting || selStart == null || selEnd == null || lines.isEmpty()) {
+            selMin = null
+            selMax = null
+            return
+        }
+        val maxRow = lines.size - 1
+        val s = TerminalPosition(
+            selStart.row.coerceIn(0, maxRow),
+            selStart.col.coerceIn(0, lines[selStart.row.coerceIn(0, maxRow)].chars.size)
+        )
+        val e = TerminalPosition(
+            selEnd.row.coerceIn(0, maxRow),
+            selEnd.col.coerceIn(0, lines[selEnd.row.coerceIn(0, maxRow)].chars.size)
+        )
+        if (s <= e) {
+            selMin = s
+            selMax = e
+        } else {
+            selMin = e
+            selMax = s
+        }
+    }
+
     fun getTextView(): TextView = TextView(context)
 
     override fun onAttachedToWindow() {
@@ -1414,6 +1720,18 @@ class TerminalView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         removeCallbacks(blinkRunnable)
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        frameCallbackPending = false
+    }
+
+    companion object {
+        /** Soft scrollback cap for the primary screen buffer. */
+        private const val MAX_SCROLLBACK_LINES = 5000
+
+        private val COLOR_DEFAULT_FG = Color.parseColor("#E2E2E6")
+        private val COLOR_DEFAULT_BG = Color.parseColor("#000000")
+        private val COLOR_CURSOR = Color.parseColor("#A8C7FA")
+        private val COLOR_SELECTION = Color.parseColor("#4285F4")
     }
 }
 

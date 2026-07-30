@@ -15,4 +15,9 @@
 .cxx
 local.properties
 .env
-debug.keystore
+*.jks
+*.keystore
+/keystore/
+*.apk
+*.ap_
+*.aab

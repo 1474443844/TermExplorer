@@ -99,6 +99,51 @@ app/src/main/
     └── viewmodel/MainViewModel.kt
 ```
 
+## CI / Release
+
+GitHub Actions workflows live under `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `ci.yml` | push / PR to `main` | Build `arm64Debug` + `x86_64Debug`，上传 APK artifact |
+| `release.yml` | push tag `v*` 或手动 | Build release APKs，上传 artifact；有 tag 时创建 GitHub Release |
+
+### 签名配置（可选）
+
+未配置签名时 release 构建仍可成功，产物为 **unsigned** APK。配置后才会用正式 keystore 签名。
+
+**GitHub Secrets**（仓库 Settings → Secrets and variables → Actions）：
+
+| Secret | 说明 |
+|--------|------|
+| `TERM_KEYSTORE_BASE64` | release keystore 的 base64（`base64 -w0 release.jks`） |
+| `TERM_STORE_PASSWORD` | keystore 密码 |
+| `TERM_KEY_ALIAS` | key alias |
+| `TERM_KEY_PASSWORD` | key 密码 |
+
+**本地 `local.properties`**（已 gitignore）：
+
+```properties
+TERM_STORE_FILE=/absolute/path/to/release.jks
+TERM_STORE_PASSWORD=***
+TERM_KEY_ALIAS=***
+TERM_KEY_PASSWORD=***
+```
+
+也可通过同名环境变量注入。
+
+### 发版
+
+```bash
+# 1. 改 app/build.gradle.kts 里的 versionCode / versionName
+# 2. 提交后打 tag 并推送
+git tag v1.0.1
+git push origin v1.0.1
+# → Release workflow 构建 arm64 + x86_64 release APK 并挂到 GitHub Release
+```
+
+或在 Actions 页手动跑 `Release`，填写 tag（如 `v1.0.1`）。
+
 ## License
 
 Private / TBD

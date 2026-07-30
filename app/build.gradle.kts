@@ -19,6 +19,39 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Optional release signing. Prefer CI secrets / env vars; fall back to
+    // local.properties keys (never committed). Without these four values the
+    // release build still succeeds but the APK is left unsigned.
+    val localProps = java.util.Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    fun prop(name: String): String? =
+        System.getenv(name)
+            ?: (project.findProperty(name) as String?)
+            ?: localProps.getProperty(name)
+
+    val storeFilePath = prop("TERM_STORE_FILE")
+    val storePassword = prop("TERM_STORE_PASSWORD")
+    val keyAlias = prop("TERM_KEY_ALIAS")
+    val keyPassword = prop("TERM_KEY_PASSWORD")
+    val hasReleaseSigning =
+        !storeFilePath.isNullOrBlank() &&
+            !storePassword.isNullOrBlank() &&
+            !keyAlias.isNullOrBlank() &&
+            !keyPassword.isNullOrBlank()
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(storeFilePath!!)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     // One APK per ABI: binaries live flat under src/<flavor>/assets/
     // (bash, coreutils, curl) — no runtime ABI folder lookup needed.
     // Both flavors share the same versionCode / versionName base; only the
@@ -61,6 +94,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

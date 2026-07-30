@@ -157,7 +157,7 @@ class PtySession(
     }
 
     /**
-     * Copy bundled system rc files from assets (`term/etc/*`) into [termEtc].
+     * Copy bundled system rc files from assets (`term/etc/`) into [termEtc].
      * Always overwrites so app updates can refresh PS1 / aliases.
      */
     private fun installTermEtc(termEtc: File) {

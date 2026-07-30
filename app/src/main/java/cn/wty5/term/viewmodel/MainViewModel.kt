@@ -32,11 +32,14 @@ class MainViewModel(
     /**
      * Hot path: PTY reader threads call [appendOutput] frequently.
      * Buffered SharedFlow + [tryEmit] avoids spawning a coroutine per chunk.
-     * No replay — the View owns the rendered buffer; replaying would re-parse
-     * history into a fresh TerminalView and corrupt the screen.
+     *
+     * Modest [replay] is required: welcome text (and early shell output) is
+     * emitted from [init] before MainActivity starts collecting. With replay=0
+     * those chunks are lost forever. Replay only affects *new* collectors
+     * (e.g. Activity recreate); an already-active collector is not re-fed.
      */
     private val _terminalOutputFlow = MutableSharedFlow<String>(
-        replay = 0,
+        replay = 64,
         extraBufferCapacity = 256,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -46,8 +49,9 @@ class MainViewModel(
 
     init {
         CoreutilsManager.isInstalled()
-        setupPtySession()
+        // Welcome first so it sits in the replay cache ahead of shell noise.
         emitWelcome()
+        setupPtySession()
     }
 
     fun appendOutput(text: String) {

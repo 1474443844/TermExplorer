@@ -2,11 +2,13 @@ package cn.wty5.term.terminal
 
 import android.app.Application
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import java.io.File
+import java.io.IOException
 
 object TermConfig {
+    private const val TAG = "TermConfig"
+
     lateinit var filesDir: File
         private set
     lateinit var nativeLibDir: File
@@ -31,47 +33,46 @@ object TermConfig {
         tmpDir = File(termDir, "tmp")
         homeDir = File(termDir, "home")
 
-        // 确保目录存在
         binDir.mkdirs()
         libDir.mkdirs()
         tmpDir.mkdirs()
         homeDir.mkdirs()
 
+        // Flavor-scoped assets ship binaries flat: assets/bash, assets/coreutils, assets/curl
+        installAssetBinary(app, assetName = "bash", dest = File(binDir, "bash"))
+        installAssetBinary(app, assetName = "curl", dest = File(binDir, "curl"))
         CoreutilsManager.isInstalled()
-        initBash(app)
     }
 
-    fun initBash(context: Context) {
-        val bashFile = File(binDir, "bash")
-
-        val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-        val targetArchFolder = when {
-            primaryAbi.contains("64") && (primaryAbi.contains("arm") || primaryAbi.contains("aarch")) -> "arm64-v8a"
-            primaryAbi.contains("64") && primaryAbi.contains("x86") -> "x86_64"
-            else -> "arm64-v8a"
+    /**
+     * Copy [assetName] from the APK's assets root into [dest] if missing/empty.
+     * ABI is fixed at build time by product flavor, so no runtime path lookup.
+     */
+    fun installAssetBinary(context: Context, assetName: String, dest: File): Boolean {
+        if (dest.exists() && dest.length() > 0L) {
+            dest.setExecutable(true, false)
+            return true
         }
-
-        val path = "$targetArchFolder/bash"
-        if (!bashFile.exists() || bashFile.length() == 0L) {
-            try {
-                context.assets.open(path).use { input ->
-                    if (bashFile.exists()) {
-                        bashFile.delete()
-                    }
-                    bashFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                    bashFile.setExecutable(true, false)
-                    Log.i(
-                        "PtySession",
-                        "Successfully extracted bash from assets path: $path"
-                    )
+        return try {
+            context.assets.open(assetName).use { input ->
+                val tmp = File(dest.absolutePath + ".tmp")
+                if (dest.exists()) dest.delete()
+                if (tmp.exists()) tmp.delete()
+                tmp.outputStream().use { output -> input.copyTo(output) }
+                if (!tmp.renameTo(dest)) {
+                    tmp.inputStream().use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+                    tmp.delete()
                 }
-            } catch (e: Exception) {
-                Log.e("PtySession", "Failed to extract bash from assets path: $path", e)
             }
-        } else {
-            bashFile.setExecutable(true, false)
+            dest.setExecutable(true, false)
+            Log.i(TAG, "Installed assets/$assetName → ${dest.absolutePath}")
+            true
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to install assets/$assetName", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install assets/$assetName", e)
+            false
         }
     }
 }

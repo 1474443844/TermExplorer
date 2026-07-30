@@ -1,15 +1,16 @@
 package cn.wty5.term.terminal
 
-import android.content.Context
 import android.os.Build
 import android.util.Log
-import cn.wty5.term.TermApp
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 
 object CoreutilsManager {
     private const val TAG = "CoreutilsManager"
+
+    /** Binaries we install ourselves and must never delete when wiring applets. */
+    private val PRESERVE_BINS = setOf("coreutils", "bash", "curl", "sh")
 
     val COREUTILS_COMMANDS = listOf(
         "[", "arch", "b2sum", "base32", "base64", "basename",
@@ -35,9 +36,10 @@ object CoreutilsManager {
         val coreutilsFile = File(TermConfig.binDir, "coreutils")
         val installed = coreutilsFile.exists() && coreutilsFile.canExecute()
         if (!installed) {
-            // Attempt to auto-install built-in coreutils on demand!
             return autoInstallBuiltIn()
         }
+        // Ensure applet links exist even if the multi-call binary is already there.
+        createSymlinks()
         return true
     }
 
@@ -58,30 +60,25 @@ object CoreutilsManager {
     fun installFromJniLibs(): Boolean {
         try {
             val nativeLibDir = TermConfig.nativeLibDir
-            val builtInLib = File(nativeLibDir, "coreutils")
+            // Prefer libcoreutils.so naming if packaged as a native lib; also accept bare name.
+            val candidates = listOf(
+                File(nativeLibDir, "libcoreutils.so"),
+                File(nativeLibDir, "coreutils")
+            )
+            val builtInLib = candidates.firstOrNull { it.exists() } ?: return false
 
-            if (builtInLib.exists()) {
-                val coreutilsFile = File(TermConfig.binDir, "coreutils")
-                if (coreutilsFile.exists()) {
-                    coreutilsFile.delete()
-                }
+            val coreutilsFile = File(TermConfig.binDir, "coreutils")
+            if (coreutilsFile.exists()) {
+                coreutilsFile.delete()
+            }
 
-                // Create a symlink from filesDir/bin/coreutils to the native library
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    try {
-                        Files.createSymbolicLink(
-                            Paths.get(coreutilsFile.absolutePath),
-                            Paths.get(builtInLib.absolutePath)
-                        )
-                    } catch (e: Exception) {
-                        builtInLib.inputStream().use { input ->
-                            coreutilsFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        coreutilsFile.setExecutable(true, false)
-                    }
-                } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    Files.createSymbolicLink(
+                        Paths.get(coreutilsFile.absolutePath),
+                        Paths.get(builtInLib.absolutePath)
+                    )
+                } catch (e: Exception) {
                     builtInLib.inputStream().use { input ->
                         coreutilsFile.outputStream().use { output ->
                             input.copyTo(output)
@@ -89,49 +86,38 @@ object CoreutilsManager {
                     }
                     coreutilsFile.setExecutable(true, false)
                 }
-
-                createSymlinks()
-                return true
+            } else {
+                builtInLib.inputStream().use { input ->
+                    coreutilsFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                coreutilsFile.setExecutable(true, false)
             }
+
+            createSymlinks()
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install from jniLibs", e)
         }
         return false
     }
 
+    /**
+     * Flavor APKs ship coreutils at the assets root (`assets/coreutils`).
+     * No ABI subfolder is consulted at runtime.
+     */
     fun installFromAssets(): Boolean {
-        try {
-            val coreutilsFile = File(TermConfig.binDir, "coreutils")
-
-            val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-            val targetArchFolder = when {
-                primaryAbi.contains("64") && (primaryAbi.contains("arm") || primaryAbi.contains("aarch")) -> "arm64-v8a"
-                primaryAbi.contains("64") && primaryAbi.contains("x86") -> "x86_64"
-                primaryAbi.contains("x86") -> "x86"
-                else -> "arm64-v8a"
-            }
-
-            val path = "$targetArchFolder/coreutils"
-            try {
-                TermApp.openAssets(path).use { input ->
-                    if (coreutilsFile.exists()) {
-                        coreutilsFile.delete()
-                    }
-                    coreutilsFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: Exception) {
-                // Try next path
-            }
-
-            coreutilsFile.setExecutable(true, false)
-            createSymlinks()
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to install from assets", e)
-        }
-        return false
+        val coreutilsFile = File(TermConfig.binDir, "coreutils")
+        val ok = TermConfig.installAssetBinary(
+            // TermConfig.init already has Application context via app; use TermApp for assets.
+            cn.wty5.term.TermApp.getAppContext(),
+            assetName = "coreutils",
+            dest = coreutilsFile
+        )
+        if (!ok) return false
+        createSymlinks()
+        return true
     }
 
     fun getInstalledCommandCount(): Int {
@@ -145,10 +131,10 @@ object CoreutilsManager {
         val coreutilsFile = File(binDir, "coreutils")
         if (!coreutilsFile.exists()) return
 
-        // Clean up any existing files/symlinks in binDir that are NOT in COREUTILS_COMMANDS and not "coreutils" itself
+        // Only remove stale applet links — never touch bash/curl/coreutils.
         binDir.listFiles()?.forEach { file ->
             val name = file.name
-            if (name != "coreutils" && name !in COREUTILS_COMMANDS) {
+            if (name !in PRESERVE_BINS && name !in COREUTILS_COMMANDS) {
                 file.delete()
             }
         }
@@ -156,6 +142,7 @@ object CoreutilsManager {
         for (cmd in COREUTILS_COMMANDS) {
             val linkFile = File(binDir, cmd)
             if (linkFile.exists()) {
+                // Skip if it's already a usable link/file; recreate for consistency.
                 linkFile.delete()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

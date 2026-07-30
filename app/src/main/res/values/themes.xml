@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
     <style name="Theme.MyApplication" parent="Theme.AppCompat.NoActionBar" />
+
+    <style name="AppTheme" parent="Theme.MyApplication">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowTranslucentStatus">false</item>
+    </style>
+
+    <style name="DialogScaleAnimation" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/dialog_scale_in</item>
+        <item name="android:windowExitAnimation">@anim/dialog_dim_out</item>
+    </style>
 </resources>

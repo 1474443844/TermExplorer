@@ -7,6 +7,8 @@
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -17,6 +19,7 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:name=".TermApp"
         android:theme="@style/Theme.MyApplication">
         <activity
             android:name=".MainActivity"
@@ -31,7 +34,7 @@
         <activity
             android:name=".FileManagerActivity"
             android:exported="false"
-            android:theme="@style/Theme.MyApplication"
+            android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustResize" />
     </application>
 

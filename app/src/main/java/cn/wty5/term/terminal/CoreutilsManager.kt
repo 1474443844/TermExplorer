@@ -3,13 +3,10 @@ package cn.wty5.term.terminal
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import java.io.BufferedInputStream
+import cn.wty5.term.TermApp
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Paths
-import java.util.zip.ZipInputStream
 
 object CoreutilsManager {
     private const val TAG = "CoreutilsManager"
@@ -26,7 +23,7 @@ object CoreutilsManager {
         "nohup", "nproc", "numfmt", "od", "paste", "pathchk",
         "pr", "printenv", "printf", "ptx", "pwd", "readlink",
         "realpath", "rm", "rmdir", "runcon", "seq", "sha1sum",
-        "sha224sum", "sha256sum","sha384sum", "sha512sum",
+        "sha224sum", "sha256sum", "sha384sum", "sha512sum",
         "shred", "shuf", "sleep", "sort", "split", "stat",
         "stty", "sum", "sync", "tac", "tail", "tee", "test", "timeout",
         "touch", "tr", "true", "truncate", "tsort", "tty", "uname",
@@ -34,24 +31,23 @@ object CoreutilsManager {
         "whoami", "yes"
     )
 
-    fun isInstalled(context: Context): Boolean {
-        val binDir = File(context.filesDir, "bin")
-        val coreutilsFile = File(binDir, "coreutils")
-        val installed = binDir.exists() && coreutilsFile.exists() && coreutilsFile.canExecute()
+    fun isInstalled(): Boolean {
+        val coreutilsFile = File(TermConfig.binDir, "coreutils")
+        val installed = coreutilsFile.exists() && coreutilsFile.canExecute()
         if (!installed) {
             // Attempt to auto-install built-in coreutils on demand!
-            return autoInstallBuiltIn(context)
+            return autoInstallBuiltIn()
         }
         return true
     }
 
-    fun autoInstallBuiltIn(context: Context): Boolean {
+    fun autoInstallBuiltIn(): Boolean {
         Log.i(TAG, "Attempting to auto-install built-in coreutils...")
-        if (installFromJniLibs(context)) {
+        if (installFromJniLibs()) {
             Log.i(TAG, "Successfully auto-installed coreutils from jniLibs!")
             return true
         }
-        if (installFromAssets(context)) {
+        if (installFromAssets()) {
             Log.i(TAG, "Successfully auto-installed coreutils from assets!")
             return true
         }
@@ -59,20 +55,13 @@ object CoreutilsManager {
         return false
     }
 
-    fun installFromJniLibs(context: Context): Boolean {
+    fun installFromJniLibs(): Boolean {
         try {
-            val nativeLibDir = context.applicationInfo.nativeLibraryDir
-            val builtInLib = listOf(
-                File(nativeLibDir, "coreutils"),
-                File(nativeLibDir, "libcoreutils.so")
-            ).firstOrNull { it.exists() }
+            val nativeLibDir = TermConfig.nativeLibDir
+            val builtInLib = File(nativeLibDir, "coreutils")
 
-            if (builtInLib != null && builtInLib.exists()) {
-                val binDir = File(context.filesDir, "bin")
-                if (!binDir.exists()) {
-                    binDir.mkdirs()
-                }
-                val coreutilsFile = File(binDir, "coreutils")
+            if (builtInLib.exists()) {
+                val coreutilsFile = File(TermConfig.binDir, "coreutils")
                 if (coreutilsFile.exists()) {
                     coreutilsFile.delete()
                 }
@@ -101,7 +90,7 @@ object CoreutilsManager {
                     coreutilsFile.setExecutable(true, false)
                 }
 
-                createSymlinks(context)
+                createSymlinks()
                 return true
             }
         } catch (e: Exception) {
@@ -110,13 +99,9 @@ object CoreutilsManager {
         return false
     }
 
-    fun installFromAssets(context: Context): Boolean {
+    fun installFromAssets(): Boolean {
         try {
-            val binDir = File(context.filesDir, "bin")
-            if (!binDir.exists()) {
-                binDir.mkdirs()
-            }
-            val coreutilsFile = File(binDir, "coreutils")
+            val coreutilsFile = File(TermConfig.binDir, "coreutils")
 
             val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val targetArchFolder = when {
@@ -126,160 +111,37 @@ object CoreutilsManager {
                 else -> "arm64-v8a"
             }
 
-            val possibleAssetPaths = listOf(
-                "$targetArchFolder/coreutils",
-                "bin/$targetArchFolder/coreutils",
-                "coreutils"
-            )
-
-            var assetPathUsed: String? = null
-            for (path in possibleAssetPaths) {
-                try {
-                    context.assets.open(path).use { input ->
-                        if (coreutilsFile.exists()) {
-                            coreutilsFile.delete()
-                        }
-                        coreutilsFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
+            val path = "$targetArchFolder/coreutils"
+            try {
+                TermApp.openAssets(path).use { input ->
+                    if (coreutilsFile.exists()) {
+                        coreutilsFile.delete()
                     }
-                    assetPathUsed = path
-                    break
-                } catch (e: Exception) {
-                    // Try next path
+                    coreutilsFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
+            } catch (e: Exception) {
+                // Try next path
             }
 
-            if (assetPathUsed != null) {
-                coreutilsFile.setExecutable(true, false)
-                createSymlinks(context)
-                return true
-            }
+            coreutilsFile.setExecutable(true, false)
+            createSymlinks()
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install from assets", e)
         }
         return false
     }
 
-    fun getInstalledCommandCount(context: Context): Int {
-        val binDir = File(context.filesDir, "bin")
+    fun getInstalledCommandCount(): Int {
+        val binDir = TermConfig.binDir
         if (!binDir.exists()) return 0
         return binDir.listFiles { _, name -> name in COREUTILS_COMMANDS }?.size ?: 0
     }
 
-    fun getInstalledVersion(context: Context): String {
-        if (!isInstalled(context)) return "Not Installed"
-        return try {
-            val binDir = File(context.filesDir, "bin")
-            val process = Runtime.getRuntime().exec(
-                arrayOf(File(binDir, "coreutils").absolutePath, "--version")
-            )
-            val output = process.inputStream.bufferedReader().use { it.readLine() } ?: ""
-            if (output.isNotBlank()) output.trim() else "uutils coreutils"
-        } catch (e: Exception) {
-            "uutils coreutils"
-        }
-    }
-
-    fun uninstall(context: Context): Boolean {
-        try {
-            val binDir = File(context.filesDir, "bin")
-            if (binDir.exists()) {
-                binDir.deleteRecursively()
-            }
-            return true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to uninstall coreutils", e)
-            return false
-        }
-    }
-
-    fun installFromZipFile(context: Context, zipFile: File): Result<Unit> {
-        return try {
-            val binDir = File(context.filesDir, "bin")
-            if (!binDir.exists()) {
-                binDir.mkdirs()
-            }
-
-            // Determine appropriate target folder based on device architecture
-            val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-            val targetArchFolder = when {
-                primaryAbi.contains("64") && (primaryAbi.contains("arm") || primaryAbi.contains("aarch")) -> "arm64-v8a"
-                primaryAbi.contains("64") && primaryAbi.contains("x86") -> "x86_64"
-                primaryAbi.contains("x86") -> "x86"
-                else -> "arm64-v8a" // Default fallback
-            }
-
-            Log.i(TAG, "Device ABI: $primaryAbi -> Target folder: $targetArchFolder")
-
-            val coreutilsFile = File(binDir, "coreutils")
-            if (coreutilsFile.exists()) {
-                coreutilsFile.delete()
-            }
-
-            var coreutilsExtracted = false
-
-            // First attempt: search for target arch folder
-            FileInputStream(zipFile).use { fis ->
-                ZipInputStream(BufferedInputStream(fis)).use { zipInput ->
-                    var entry = zipInput.nextEntry
-                    while (entry != null) {
-                        val entryName = entry.name
-                        if (entryName.contains(targetArchFolder) && entryName.endsWith("coreutils") && !entry.isDirectory) {
-                            FileOutputStream(coreutilsFile).use { out ->
-                                zipInput.copyTo(out)
-                            }
-                            coreutilsExtracted = true
-                            Log.i(TAG, "Extracted coreutils binary for $targetArchFolder")
-                            break
-                        }
-                        zipInput.closeEntry()
-                        entry = zipInput.nextEntry
-                    }
-                }
-            }
-
-            // Second attempt fallback: find ANY coreutils binary in the zip if specific arch folder was not matched
-            if (!coreutilsExtracted) {
-                FileInputStream(zipFile).use { fis ->
-                    ZipInputStream(BufferedInputStream(fis)).use { zipInput ->
-                        var entry = zipInput.nextEntry
-                        while (entry != null) {
-                            val entryName = entry.name
-                            if (entryName.endsWith("coreutils") && !entry.isDirectory) {
-                                FileOutputStream(coreutilsFile).use { out ->
-                                    zipInput.copyTo(out)
-                                }
-                                coreutilsExtracted = true
-                                Log.i(TAG, "Extracted fallback coreutils binary: $entryName")
-                                break
-                            }
-                            zipInput.closeEntry()
-                            entry = zipInput.nextEntry
-                        }
-                    }
-                }
-            }
-
-            if (!coreutilsFile.exists() || coreutilsFile.length() == 0L) {
-                return Result.failure(Exception("Could not find any 'coreutils' binary inside the ZIP file."))
-            }
-
-            // Make executable
-            coreutilsFile.setExecutable(true, false)
-
-            // Setup symlinks
-            createSymlinks(context)
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Installation failed", e)
-            Result.failure(e)
-        }
-    }
-
-    fun createSymlinks(context: Context) {
-        val binDir = File(context.filesDir, "bin")
+    fun createSymlinks() {
+        val binDir = TermConfig.binDir
         val coreutilsFile = File(binDir, "coreutils")
         if (!coreutilsFile.exists()) return
 

@@ -1,5 +1,5 @@
 [versions]
-agp = "9.3.0"
+agp = "9.3.1"
 coreKtx = "1.19.0"
 lifecycleRuntimeKtx = "2.11.0"
 kotlin = "2.4.10"
@@ -14,6 +14,9 @@ okhttp = "5.4.0"
 googleDevtoolsKsp = "2.3.10"
 lifecycleViewmodelKtx = "2.11.0"
 appcompat = "1.7.1"
+material = "1.14.0"
+constraintlayout = "2.2.1"
+coil = "2.7.0"
 
 
 [libraries]
@@ -30,10 +33,12 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 androidx-drawerlayout = { group = "androidx.drawerlayout", name = "drawerlayout", version = "1.2.0" }
 androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycleViewmodelKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+io-coil-kt-coil = { module = "io.coil-kt:coil", version.ref = "coil" }
 
 
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
-

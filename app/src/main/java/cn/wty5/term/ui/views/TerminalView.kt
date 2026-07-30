@@ -823,20 +823,48 @@ class TerminalView @JvmOverloads constructor(
     fun appendOutput(ansiText: String) {
         post {
             val events = AnsiParser.parseEvents(ansiText)
+
+            // Readline history redraw often does: CR + rewrite shorter text [+ ESC[K].
+            // If EL is missing (some bash builds), a short rewrite leaves the tail of the
+            // previous long command visible ("ls" over "curl ..." → "lsrl ...").
+            // Track CR-then-text without EL and truncate to the cursor at batch end.
+            var sawCr = false
+            var wroteAfterCr = false
+            var erasedAfterCr = false
+
             for (event in events) {
                 when (event) {
-                    is AnsiParser.Event.Text -> putChar(event.char, event.style)
+                    is AnsiParser.Event.Text -> {
+                        putChar(event.char, event.style)
+                        if (sawCr) wroteAfterCr = true
+                    }
+
                     is AnsiParser.Event.NewLine -> {
                         if (cursorRow < lines.size) {
                             lines[cursorRow].isSoftWrapped = false
                         }
+                        // Finishing the line: any pending CR redraw is complete.
+                        if (sawCr && wroteAfterCr && !erasedAfterCr) {
+                            eraseInLine(0)
+                        }
+                        sawCr = false
+                        wroteAfterCr = false
+                        erasedAfterCr = false
                         cursorRow++
                         cursorCol = 0
                         ensureLine(cursorRow)
                     }
 
                     is AnsiParser.Event.CarriageReturn -> {
+                        // If a previous CR-rewrite in this same batch never got EL,
+                        // finish it before starting a new one.
+                        if (sawCr && wroteAfterCr && !erasedAfterCr) {
+                            eraseInLine(0)
+                        }
                         cursorCol = 0
+                        sawCr = true
+                        wroteAfterCr = false
+                        erasedAfterCr = false
                     }
 
                     is AnsiParser.Event.Backspace -> {
@@ -882,12 +910,33 @@ class TerminalView @JvmOverloads constructor(
 
                     is AnsiParser.Event.EraseInLine -> {
                         eraseInLine(event.mode)
+                        if (sawCr) erasedAfterCr = true
                     }
 
                     is AnsiParser.Event.EraseInDisplay -> {
                         eraseInDisplay(event.mode)
+                        if (sawCr) erasedAfterCr = true
+                    }
+
+                    is AnsiParser.Event.EraseChars -> {
+                        eraseChars(event.n)
+                        if (sawCr) erasedAfterCr = true
+                    }
+
+                    is AnsiParser.Event.DeleteChars -> {
+                        deleteChars(event.n)
+                        if (sawCr) erasedAfterCr = true
+                    }
+
+                    is AnsiParser.Event.InsertChars -> {
+                        insertChars(event.n)
                     }
                 }
+            }
+
+            // CR + shorter rewrite without EL in this chunk (common with readline).
+            if (sawCr && wroteAfterCr && !erasedAfterCr) {
+                eraseInLine(0)
             }
 
             // Cap the scrollback list size to 2000 lines
@@ -931,11 +980,13 @@ class TerminalView @JvmOverloads constructor(
             // Erase from cursor to end of line (inclusive)
             0 -> {
                 if (cursorCol < line.size) {
-                    // Truncate trailing content so deleted chars disappear
+                    // Truncate trailing content so deleted / shorter redraws disappear
                     while (line.size > cursorCol) {
                         line.removeAt(line.lastIndex)
                     }
                 }
+                // Also clear soft-wrapped continuation rows of this logical line.
+                clearSoftWrapTail(cursorRow)
             }
             // Erase from start of line to cursor (inclusive)
             1 -> {
@@ -949,7 +1000,70 @@ class TerminalView @JvmOverloads constructor(
             // Erase entire line
             2 -> {
                 line.clear()
+                clearSoftWrapTail(cursorRow)
             }
+        }
+    }
+
+    /** Drop soft-wrapped visual rows that continue [fromRow]. */
+    private fun clearSoftWrapTail(fromRow: Int) {
+        if (fromRow < 0 || fromRow >= lines.size) return
+        // Only walk forward while rows claim to be soft-wrapped continuations.
+        var r = fromRow
+        while (r < lines.size - 1 && lines[r].isSoftWrapped) {
+            lines[r].isSoftWrapped = false
+            r++
+            if (r < lines.size) {
+                lines[r].chars.clear()
+            }
+        }
+        if (fromRow < lines.size) {
+            lines[fromRow].isSoftWrapped = false
+        }
+    }
+
+    /** CSI n X — replace n cells from cursor with blanks (cursor stays). */
+    private fun eraseChars(n: Int) {
+        if (n <= 0) return
+        ensureLine(cursorRow)
+        val line = lines[cursorRow].chars
+        val end = (cursorCol + n).coerceAtMost(line.size)
+        for (i in cursorCol until end) {
+            line[i] = blankChar()
+        }
+        // If erase extends past current stored length, nothing else to do.
+    }
+
+    /** CSI n P — delete n cells at cursor, shift remainder left. */
+    private fun deleteChars(n: Int) {
+        if (n <= 0) return
+        ensureLine(cursorRow)
+        val line = lines[cursorRow].chars
+        if (cursorCol >= line.size) return
+        val removeCount = n.coerceAtMost(line.size - cursorCol)
+        repeat(removeCount) {
+            if (cursorCol < line.size) {
+                line.removeAt(cursorCol)
+            }
+        }
+    }
+
+    /** CSI n @ — insert n blank cells at cursor, shift remainder right. */
+    private fun insertChars(n: Int) {
+        if (n <= 0) return
+        ensureLine(cursorRow)
+        val line = lines[cursorRow].chars
+        while (line.size < cursorCol) {
+            line.add(blankChar())
+        }
+        repeat(n) {
+            if (cursorCol <= line.size) {
+                line.add(cursorCol, blankChar())
+            }
+        }
+        // Keep line from growing without bound past terminal width.
+        while (line.size > currentCols.coerceAtLeast(1)) {
+            line.removeAt(line.lastIndex)
         }
     }
 

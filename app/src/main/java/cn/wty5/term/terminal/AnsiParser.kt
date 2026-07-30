@@ -41,6 +41,12 @@ object AnsiParser {
         data class EraseInLine(val mode: Int) : Event()
         /** mode: 0 = to end, 1 = to start, 2 = entire screen, 3 = screen+scrollback */
         data class EraseInDisplay(val mode: Int) : Event()
+        /** CSI n X — erase n characters from cursor (replace with blanks) */
+        data class EraseChars(val n: Int) : Event()
+        /** CSI n P — delete n characters at cursor (shift remainder left) */
+        data class DeleteChars(val n: Int) : Event()
+        /** CSI n @ — insert n blank characters at cursor */
+        data class InsertChars(val n: Int) : Event()
     }
 
     // Incomplete escape sequence carry-over across chunked PTY reads.
@@ -254,34 +260,45 @@ object AnsiParser {
                 events.add(Event.CursorPosition(row.coerceAtLeast(1), col.coerceAtLeast(1)))
             }
 
-            // Erase in display
-            'J' -> events.add(Event.EraseInDisplay(csiCount(params, default = 0)))
+            // Erase in display — mode 0 is valid and common
+            'J' -> events.add(Event.EraseInDisplay(csiCount(params, default = 0, allowZero = true)))
 
-            // Erase in line — critical for readline delete/redraw
-            'K' -> events.add(Event.EraseInLine(csiCount(params, default = 0)))
+            // Erase in line — critical for readline history redraw (long → short)
+            'K' -> events.add(Event.EraseInLine(csiCount(params, default = 0, allowZero = true)))
+
+            // Erase / delete / insert characters — also used by readline redisplay
+            'X' -> events.add(Event.EraseChars(csiCount(params, default = 1)))
+            'P' -> events.add(Event.DeleteChars(csiCount(params, default = 1)))
+            '@' -> events.add(Event.InsertChars(csiCount(params, default = 1)))
 
             // Private mode set/reset: ESC [ ? 2004 h/l etc. — ignore
             'h', 'l' -> Unit
 
-            // Insert/delete chars/lines etc. — ignore for now
             else -> Unit
         }
     }
 
-    private fun csiCount(params: String, default: Int = 1): Int {
+    /**
+     * @param allowZero when true, an explicit `0` parameter is kept (needed for EL/ED).
+     *                  VT100 treats 0 like the default for most cursor ops.
+     */
+    private fun csiCount(params: String, default: Int = 1, allowZero: Boolean = false): Int {
         if (params.isEmpty()) return default
-        // Take the first numeric field; ignore leading '?' for private modes
+        // Take the first numeric field; ignore leading '?', '>', '!' for private/modes
         val cleaned = params.trimStart('?', '>', '!')
         if (cleaned.isEmpty()) return default
         val first = cleaned.split(';', limit = 2)[0]
-        return first.toIntOrNull()?.takeIf { it > 0 } ?: default
+        val n = first.toIntOrNull() ?: return default
+        if (n == 0) return if (allowZero) 0 else default
+        return if (n < 0) default else n
     }
 
     private fun csiPair(params: String, defaultRow: Int, defaultCol: Int): Pair<Int, Int> {
         if (params.isEmpty()) return defaultRow to defaultCol
         val parts = params.split(';')
-        val row = parts.getOrNull(0)?.toIntOrNull()?.takeIf { it > 0 } ?: defaultRow
-        val col = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 } ?: defaultCol
+        // CUP uses 0 as 1
+        val row = parts.getOrNull(0)?.toIntOrNull()?.let { if (it <= 0) defaultRow else it } ?: defaultRow
+        val col = parts.getOrNull(1)?.toIntOrNull()?.let { if (it <= 0) defaultCol else it } ?: defaultCol
         return row to col
     }
 

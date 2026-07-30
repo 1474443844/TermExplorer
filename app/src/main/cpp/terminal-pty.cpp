@@ -1,12 +1,12 @@
 #include <jni.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
-#include <string.h>
+#include <cstring>
 #include <android/log.h>
 
 #define LOG_TAG "TerminalPty"
@@ -17,8 +17,8 @@ extern "C" {
 
 JNIEXPORT jintArray JNICALL
 Java_cn_wty5_term_terminal_Pty_create(JNIEnv *env, jobject clazz,
-                                     jstring cmd_str, jstring cwd_str,
-                                     jobjectArray args_array, jobjectArray envp_array) {
+                                      jstring cmd_str, jstring cwd_str,
+                                      jobjectArray args_array, jobjectArray envp_array) {
     // 1. Open master PTY
     int master_fd = posix_openpt(O_RDWR | O_NOCTTY);
     if (master_fd < 0) {
@@ -157,7 +157,7 @@ Java_cn_wty5_term_terminal_Pty_read(JNIEnv *env, jobject clazz, jint fd, jbyteAr
 
 JNIEXPORT jint JNICALL
 Java_cn_wty5_term_terminal_Pty_write(JNIEnv *env, jobject clazz, jint fd, jbyteArray buffer,
-                                    jint offset, jint length) {
+                                     jint offset, jint length) {
     jbyte *buf = env->GetByteArrayElements(buffer, nullptr);
 
     int written = write(fd, buf + offset, length);

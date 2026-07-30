@@ -15,7 +15,7 @@ object Pty {
         cmd: String,
         cwd: String,
         args: Array<String>,
-        envp: Array<String>?
+        env: Array<String>?
     ): IntArray?
 
     external fun read(fd: Int, buffer: ByteArray): Int
@@ -27,4 +27,6 @@ object Pty {
     external fun resize(fd: Int, rows: Int, cols: Int)
 
     external fun waitProcess(pid: Int): Int
+
+//    external fun killPid(pid: Int): Int
 }

@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.google.devtools.ksp)
 }
 
 android {
@@ -56,7 +55,7 @@ android {
         abortOnError = false
         checkReleaseBuilds = false
     }
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 }
 
 // Some unused dependencies are commented out below instead of being removed.
@@ -72,13 +71,9 @@ dependencies {
     // implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.recyclerview)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.logging.interceptor)
     implementation(libs.okhttp)
-
-    "ksp"(libs.androidx.room.compiler)
 }

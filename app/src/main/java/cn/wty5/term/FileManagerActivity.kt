@@ -11,13 +11,17 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -41,18 +45,16 @@ class FileManagerActivity : AppCompatActivity() {
 
     private lateinit var viewModel: FileManagerViewModel
     private lateinit var drawerLayout: DrawerLayout
+    private lateinit var toolbar: Toolbar
+    private lateinit var drawerToggle: ActionBarDrawerToggle
     private lateinit var leftPanel: PanelViews
     private lateinit var rightPanel: PanelViews
     private lateinit var placesAdapter: PlacesAdapter
     private lateinit var tvSidebarActivePanel: TextView
-    private lateinit var tvHeaderActiveHint: TextView
 
     private var activeEditorDialog: AlertDialog? = null
     private var suppressFilterCallback = false
     private var pendingSdPanel: FileManagerViewModel.Panel = FileManagerViewModel.Panel.LEFT
-    private var lastActivePanel: FileManagerViewModel.Panel = FileManagerViewModel.Panel.LEFT
-    private var lastLeftPath: String = ""
-    private var lastRightPath: String = ""
 
     private data class PanelViews(
         val root: View,
@@ -73,15 +75,57 @@ class FileManagerActivity : AppCompatActivity() {
         )[FileManagerViewModel::class.java]
 
         drawerLayout = findViewById(R.id.fm_drawer_layout)
+        toolbar = findViewById(R.id.fm_toolbar)
         tvSidebarActivePanel = findViewById(R.id.tv_sidebar_active_panel)
-        tvHeaderActiveHint = findViewById(R.id.tv_header_active_hint)
 
+        setupToolbar()
         leftPanel = bindPanel(findViewById(R.id.layout_panel_left), FileManagerViewModel.Panel.LEFT)
         rightPanel = bindPanel(findViewById(R.id.layout_panel_right), FileManagerViewModel.Panel.RIGHT)
         setupSidebar()
         setupActions()
         collectState()
         collectEvents()
+    }
+
+    private fun setupToolbar() {
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayShowTitleEnabled(true)
+        toolbar.title = getString(R.string.file_manager_title)
+        toolbar.subtitle = getString(R.string.file_manager_subtitle)
+
+        drawerToggle = ActionBarDrawerToggle(
+            this,
+            drawerLayout,
+            toolbar,
+            R.string.sidebar_open,
+            R.string.sidebar_close
+        )
+        drawerLayout.addDrawerListener(drawerToggle)
+        drawerToggle.syncState()
+        // Keep custom hamburger tinted for dark chrome.
+        drawerToggle.drawerArrowDrawable.color =
+            ContextCompat.getColor(this, R.color.fm_text_primary)
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_file_manager, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (drawerToggle.onOptionsItemSelected(item)) return true
+        return when (item.itemId) {
+            R.id.action_back_terminal -> {
+                finish()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        drawerToggle.syncState()
     }
 
     override fun onResume() {
@@ -103,9 +147,6 @@ class FileManagerActivity : AppCompatActivity() {
             itemAnimator = null
         }
 
-        findViewById<Button>(R.id.btn_open_sidebar).setOnClickListener {
-            drawerLayout.openDrawer(GravityCompat.START)
-        }
         findViewById<Button>(R.id.btn_sidebar_refresh).setOnClickListener {
             viewModel.refreshBoth()
         }
@@ -156,7 +197,6 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun setupActions() {
-        findViewById<Button>(R.id.btn_close_file_manager).setOnClickListener { finish() }
         findViewById<Button>(R.id.btn_action_copy).setOnClickListener { viewModel.requestCopy() }
         findViewById<Button>(R.id.btn_action_move).setOnClickListener { viewModel.requestMove() }
         findViewById<Button>(R.id.btn_action_rename).setOnClickListener { viewModel.requestRename() }
@@ -188,18 +228,13 @@ class FileManagerActivity : AppCompatActivity() {
                     } else {
                         getString(R.string.sidebar_target_right)
                     }
-                    tvHeaderActiveHint.text = if (activeIsLeft) {
-                        "Active: LEFT · ${state.left.path}"
-                    } else {
-                        "Active: RIGHT · ${state.right.path}"
-                    }
+                    val activePath = if (activeIsLeft) state.left.path else state.right.path
+                    val panelLabel = if (activeIsLeft) "LEFT" else "RIGHT"
+                    toolbar.subtitle = "$panelLabel / $activePath"
 
-                    lastActivePanel = state.activePanel
-                    lastLeftPath = state.left.path
-                    lastRightPath = state.right.path
                     placesAdapter.submit(
                         places = state.places,
-                        activePath = if (activeIsLeft) state.left.path else state.right.path
+                        activePath = activePath
                     )
                 }
             }

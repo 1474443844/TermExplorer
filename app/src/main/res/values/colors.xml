@@ -27,4 +27,10 @@
     <color name="fm_item">#171C24</color>
     <color name="fm_item_selected">#1E2D4A</color>
     <color name="fm_parent">#162536</color>
+    <color name="toolbar">#FF303030</color>
+    <color name="gray">#FF646464</color>
+    <color name="file_color">#FF607D8B</color>
+    <color name="DialogButtonColor">#039BE5</color>
+    <color name="DialogSelectedColor">#FFB3DCFC</color>
+    <color name="item_selected">#FF65C0DF</color>
 </resources>

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/fm_drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -11,82 +12,20 @@
         android:background="@color/fm_bg"
         android:orientation="vertical">
 
-        <!-- Header -->
-        <LinearLayout
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/fm_toolbar"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="?attr/actionBarSize"
             android:background="@color/fm_surface"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="10dp">
-
-            <Button
-                android:id="@+id/btn_open_sidebar"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_fm_header_icon"
-                android:contentDescription="@string/sidebar_open"
-                android:minWidth="0dp"
-                android:padding="0dp"
-                android:stateListAnimator="@null"
-                android:text="☰"
-                android:textColor="@color/fm_text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <FrameLayout
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_fm_header_icon">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="📁"
-                    android:textSize="16sp" />
-            </FrameLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/file_manager_title"
-                    android:textColor="@color/fm_text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tv_header_active_hint"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:text="@string/file_manager_subtitle"
-                    android:textColor="@color/fm_accent"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <Button
-                android:id="@+id/btn_close_file_manager"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_fm_header_icon"
-                android:contentDescription="@string/back_to_terminal"
-                android:minWidth="0dp"
-                android:paddingHorizontal="12dp"
-                android:stateListAnimator="@null"
-                android:text="↩ Terminal"
-                android:textColor="@color/fm_text_primary"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+            android:elevation="2dp"
+            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+            app:contentInsetStartWithNavigation="0dp"
+            app:navigationContentDescription="@string/sidebar_open"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Dark"
+            app:subtitleTextAppearance="@style/TextAppearance.AppCompat.Caption"
+            app:subtitleTextColor="@color/fm_accent"
+            app:title="@string/file_manager_title"
+            app:titleTextColor="@color/fm_text_primary" />
 
         <View
             android:layout_width="match_parent"
@@ -94,9 +33,6 @@
             android:background="@color/fm_stroke" />
 
         <!-- Dual panels -->
-
-        <!-- Bottom action bar -->
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -124,6 +60,7 @@
                 android:layout_weight="1" />
         </LinearLayout>
 
+        <!-- Bottom action bar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

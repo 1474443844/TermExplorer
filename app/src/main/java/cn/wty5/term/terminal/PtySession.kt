@@ -14,8 +14,13 @@ class PtySession(
     private val filesDir: File = context.filesDir
     private val nativeLibDir: File = File(context.applicationInfo.nativeLibraryDir)
 
+    @Volatile
     private var masterFd: Int = -1
+
+    @Volatile
     private var pid: Int = -1
+
+    @Volatile
     private var isRunning = false
 
     init {
@@ -27,128 +32,58 @@ class PtySession(
         if (isRunning) return
         try {
             // Setup robust env variables
-            val envList = ArrayList<String>()
-            envList.add("TERM=xterm-256color")
+            val env = HashMap<String, String>(System.getenv())
 
-            // Check for custom Coreutils binary in PATH
-            val binDir = File(filesDir, "bin")
-            if (!binDir.exists()) {
-                binDir.mkdirs()
-            }
+            val targetSdkVersion: Int = context.applicationInfo.targetSdkVersion
+
+            env["TERM"] = "xterm-256color"
+
+            val termDir = TermConfig.termDir
+            val binDir = TermConfig.binDir
+            val libDir = TermConfig.libDir
+            val tmpDir = TermConfig.tmpDir
+            val homeDir = TermConfig.homeDir
+
+
+            env["HOME"] = homeDir.absolutePath
+            env["TEPDIR"] = tmpDir.absolutePath
+            env["LANG"] = "en_US.UTF-8"
 
             val bashFile = File(binDir, "bash")
-            var bashExtracted = false
 
-            // 1. Try to extract bash from assets first
-            val primaryAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-            val targetArchFolder = when {
-                primaryAbi.contains("64") && (primaryAbi.contains("arm") || primaryAbi.contains("aarch")) -> "arm64-v8a"
-                primaryAbi.contains("64") && primaryAbi.contains("x86") -> "x86_64"
-                primaryAbi.contains("x86") -> "x86"
-                else -> "arm64-v8a"
+
+            env["SHELL"] = bashFile.absolutePath
+            env["PREFIX"] = termDir.absolutePath
+            env["PROMPT_COMMAND"] = "history -a"
+            env["PWD"] = workingDir.absolutePath
+            env["PATH"] = "${binDir.absolutePath}:${env["PATH"]}"
+            env["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${env["LD_LIBRARY_PATH"]}"
+
+
+            val envList = mutableListOf<String>()
+
+            env.forEach { (k, v) ->
+                envList.add("$k=$v")
             }
 
-            val possibleAssetPaths = listOf(
-                "$targetArchFolder/bash",
-                "bash"
-            )
+            // Term prefix layout (Termux-like):
+            //   $PREFIX/etc/bash.bashrc  - system bashrc (PS1 lives here)
+            //   $PREFIX/etc/shrc         - non-bash interactive rc
+            //   $PREFIX/var/bash_history - readline history file
+            val termEtc = File(TermConfig.termDir, "etc")
+            termEtc.mkdirs()
 
-            if (!bashFile.exists() || bashFile.length() == 0L) {
-                for (path in possibleAssetPaths) {
-                    try {
-                        context.assets.open(path).use { input ->
-                            if (bashFile.exists()) {
-                                bashFile.delete()
-                            }
-                            bashFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                            bashFile.setExecutable(true, false)
-                            Log.i(
-                                "PtySession",
-                                "Successfully extracted bash from assets path: $path"
-                            )
-                            bashExtracted = true
-                        }
-                        if (bashExtracted) break
-                    } catch (e: Exception) {
-                        Log.e("PtySession", "Failed to extract bash from assets path: $path", e)
-                    }
-                }
-            } else {
-                bashExtracted = true
-                bashFile.setExecutable(true, false)
-            }
+            // Install / refresh system rc files from assets -> $PREFIX/etc/
+            installTermEtc(termEtc)
 
-            // 2. Fallback to extracting from nativeLibDir if assets extraction wasn't completed
-            if (!bashExtracted) {
-                val builtInBash = listOf(
-                    File(nativeLibDir, "bash"),
-                    File(nativeLibDir, "libbash.so")
-                ).firstOrNull { it.exists() }
-
-                if (builtInBash != null && builtInBash.exists()) {
-                    if (!bashFile.exists() || bashFile.length() != builtInBash.length()) {
-                        try {
-                            builtInBash.inputStream().use { input ->
-                                bashFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            bashFile.setExecutable(true, false)
-                            Log.i(
-                                "PtySession",
-                                "Successfully copied built-in bash to filesDir/bin/bash and made executable"
-                            )
-                        } catch (e: Exception) {
-                            Log.e(
-                                "PtySession",
-                                "Failed to copy built-in bash to filesDir/bin/bash",
-                                e
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (binDir.exists() && File(binDir, "coreutils").exists()) {
-                envList.add("PATH=${binDir.absolutePath}:/system/bin:/system/xbin:/vendor/bin:/sbin")
-            } else {
-                envList.add("PATH=/system/bin:/system/xbin:/vendor/bin:/sbin")
-            }
-
-            envList.add("HOME=${workingDir.absolutePath}")
-            envList.add("PWD=${workingDir.absolutePath}")
-            envList.add("TERM_BIN=${binDir.absolutePath}")
-            // Ignore leftover/workspace .inputrc; readline defaults are fine.
-            envList.add("INPUTRC=/dev/null")
-
-            // Remove legacy workspace configs from older app versions.
-            deleteLegacyShellConfigFiles()
-
-            val shellCandidates = listOf(
-                File(binDir, "bash").absolutePath,
-                File(nativeLibDir, "bash").absolutePath,
-                File(nativeLibDir, "libbash.so").absolutePath,
-                "/system/bin/bash",
-                "/system/xbin/bash",
-                "/vendor/bin/bash",
-                "/data/data/com.termux/files/usr/bin/bash",
+            val shellPath = if (bashFile.exists()) {
+                bashFile.absolutePath
+            }else{
                 "/system/bin/sh"
-            )
-            val shellPath = shellCandidates.firstOrNull { File(it).exists() } ?: "/system/bin/sh"
-            val isBash = shellPath.endsWith("bash") || shellPath.endsWith("libbash.so")
-
-            // Shell init lives in app-private storage (not workspace HOME), so
-            // the file manager / sandbox never sees .shinit or .inputrc.
-            val shellRc = ensurePrivateShellRc(isBash, binDir.absolutePath)
-            val args = if (isBash) {
-                arrayOf("--rcfile", shellRc.absolutePath, "-i")
-            } else {
-                // POSIX sh reads $ENV for interactive shells.
-                envList.add("ENV=${shellRc.absolutePath}")
-                arrayOf("-i")
             }
+
+            val bashRc = File(termEtc, "bash.bashrc")
+            val args = arrayOf("--rcfile", bashRc.absolutePath, "-i")
 
             val result = Pty.create(
                 shellPath,
@@ -234,126 +169,28 @@ class PtySession(
         }
     }
 
-    fun updateWorkingDirectory(dir: File) {
-        this.workingDir = dir
-        write("cd \"${dir.absolutePath}\"\n")
-    }
 
     fun destroy() {
         cleanUp()
     }
 
     /**
-     * Write (or refresh) the shell rc under app-private storage.
-     * Never writes `.shinit` / `.inputrc` into the user workspace (HOME).
+     * Copy bundled system rc files from assets (`term/etc/\*`) into [termEtc].
+     * Always overwrites so app updates can refresh PS1 / aliases.
      */
-    private fun ensurePrivateShellRc(isBash: Boolean, termBin: String): File {
-        val shellDir = File(filesDir, "shell")
-        if (!shellDir.exists()) {
-            shellDir.mkdirs()
-        }
-        val rcFile = File(shellDir, if (isBash) "bashrc" else "shrc")
-        // Escape for single-quoted shell string: abc'def -> abc'\''def
-        val termBinEscaped = termBin.replace("'", "'\\''")
-        val content = if (isBash) {
-            """
-            export TERM_BIN='$termBinEscaped'
-            export PS1='\[\e[32m\]\W\[\e[0m\] \$ '
-
-            alias ls='ls --color=auto' 2>/dev/null
-            alias ll='ls -l --color=auto' 2>/dev/null
-            alias grep='grep --color=auto' 2>/dev/null
-            alias egrep='egrep --color=auto' 2>/dev/null
-            alias fgrep='fgrep --color=auto' 2>/dev/null
-
-            fix_shebang() {
-              if [ -z "${'$'}1" ]; then
-                echo "Usage: fix_shebang <script_file>"
-                return 1
-              fi
-              if [ ! -f "${'$'}1" ]; then
-                echo "Error: File '${'$'}1' does not exist."
-                return 1
-              fi
-              sed -i "s|^#!/usr/bin/env bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
-              sed -i "s|^#!/usr/bin/env sh|#!/system/bin/sh|" "${'$'}1"
-              sed -i "s|^#!/bin/bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
-              sed -i "s|^#!/bin/sh|#!/system/bin/sh|" "${'$'}1"
-              echo "Shebang updated for ${'$'}1"
-            }
-
-            # Optional user overrides from workspace HOME
-            [ -f "${'$'}HOME/.bashrc" ] && . "${'$'}HOME/.bashrc"
-
-            # Keep our prompt last so user rc cannot break it
-            PS1='\[\e[32m\]\W\[\e[0m\] \$ '
-            """.trimIndent() + "\n"
-        } else {
-            """
-            export TERM_BIN='$termBinEscaped'
-            set -o emacs 2>/dev/null
-
-            cwd_prompt() {
-              cwd=${'$'}(pwd)
-              if [ "${'$'}cwd" = "${'$'}HOME" ]; then
-                name="~"
-              else
-                name="${'$'}{cwd##*/}"
-                [ -z "${'$'}name" ] && name="/"
-              fi
-              printf '%s' "${'$'}name"
-            }
-
-            alias ls='ls --color=auto' 2>/dev/null
-            alias ll='ls -l --color=auto' 2>/dev/null
-            alias grep='grep --color=auto' 2>/dev/null
-
-            fix_shebang() {
-              if [ -z "${'$'}1" ]; then
-                echo "Usage: fix_shebang <script_file>"
-                return 1
-              fi
-              if [ ! -f "${'$'}1" ]; then
-                echo "Error: File '${'$'}1' does not exist."
-                return 1
-              fi
-              sed -i "s|^#!/usr/bin/env bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
-              sed -i "s|^#!/usr/bin/env sh|#!/system/bin/sh|" "${'$'}1"
-              sed -i "s|^#!/bin/bash|#!${'$'}TERM_BIN/bash|" "${'$'}1"
-              sed -i "s|^#!/bin/sh|#!/system/bin/sh|" "${'$'}1"
-              echo "Shebang updated for ${'$'}1"
-            }
-
-            ESC=${'$'}(printf '\033')
-            PS1="${'$'}{ESC}[32m\$(cwd_prompt)${'$'}{ESC}[0m \${'$'} "
-            """.trimIndent() + "\n"
-        }
-
+    private fun installTermEtc(termEtc: File) {
+        val name = "bash.bashrc"
+        val assetPath = "term/etc/$name"
+        val outFile = File(termEtc, name)
         try {
-            // Always rewrite so termBin / prompt stay current.
-            rcFile.writeText(content)
-        } catch (e: Exception) {
-            Log.e("PtySession", "Failed to write private shell rc: ${rcFile.absolutePath}", e)
-        }
-        return rcFile
-    }
-
-    private fun deleteLegacyShellConfigFiles() {
-        val parentDir = workingDir.parentFile ?: workingDir
-        val candidates = listOf(
-            File(workingDir, ".inputrc"),
-            File(workingDir, ".shinit"),
-            File(parentDir, ".shinit"),
-            File(parentDir, ".inputrc")
-        )
-        for (file in candidates) {
-            try {
-                if (file.isFile && file.delete()) {
-                    Log.i("PtySession", "Removed legacy shell config: ${file.absolutePath}")
+            context.assets.open(assetPath).use { input ->
+                outFile.outputStream().use { output ->
+                    input.copyTo(output)
                 }
-            } catch (e: Exception) {
-                Log.w("PtySession", "Failed to remove legacy shell config: ${file.absolutePath}", e)
             }
+            Log.i("PtySession", "Installed $assetPath → ${outFile.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("PtySession", "Failed to install $assetPath", e)
         }
     }
 

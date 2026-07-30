@@ -1,6 +1,6 @@
 # TermExplorer
 
-Android 终端模拟器 + 双栏文件管理器。内置 bash / coreutils / curl，通过 JNI PTY 提供完整交互式 shell。
+Android 终端模拟器 + 双栏文件管理器. 内置 bash / coreutils / curl.
 
 ## 功能
 
@@ -11,15 +11,12 @@ Android 终端模拟器 + 双栏文件管理器。内置 bash / coreutils / curl
 
 ## 构建变体（按 ABI 分包）
 
-每个 ABI 单独出 APK，assets 与 native 库一并按 flavor 拆分，运行时无需再做 ABI 目录选择。
+每个 ABI 单独出 APK，assets 与 native 库一并按 flavor 拆分。
 
-| Flavor  | ABI       | versionName    | 适用场景     |
-|---------|-----------|----------------|--------------|
-| `arm64` | arm64-v8a | `v1.0-arm64`   | 真机         |
-| `x86_64`| x86_64    | `v1.0-x86_64`  | 模拟器       |
-
-两个 flavor 共用同一个 `versionCode`（`26073101`）。
-
+| Flavor  | ABI       | 适用场景 |
+|---------|-----------|-----|
+| `arm64` | arm64-v8a | 真机 |
+| `x86_64`| x86_64    | 模拟器 |
 ```
 app/src/
 ├── main/                  # 公共代码 & 资源
@@ -121,7 +118,7 @@ GitHub Actions workflows live under `.github/workflows/`:
 | `TERM_KEY_ALIAS` | key alias |
 | `TERM_KEY_PASSWORD` | key 密码 |
 
-**本地 `local.properties`**（已 gitignore）：
+**本地 `local.properties`**：
 
 ```properties
 TERM_STORE_FILE=/absolute/path/to/release.jks

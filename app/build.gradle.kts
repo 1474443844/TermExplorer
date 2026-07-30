@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -14,7 +16,7 @@ android {
         //noinspection ExpiredTargetSdkVersion
         targetSdk = 28
         versionCode = 26073101
-        versionName = "v1.0"
+        versionName = "v1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -22,7 +24,7 @@ android {
     // Optional release signing. Prefer CI secrets / env vars; fall back to
     // local.properties keys (never committed). Without these four values the
     // release build still succeeds but the APK is left unsigned.
-    val localProps = java.util.Properties().apply {
+    val localProps = Properties().apply {
         val f = rootProject.file("local.properties")
         if (f.exists()) f.inputStream().use { load(it) }
     }
@@ -44,7 +46,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(storeFilePath!!)
+                storeFile = file(storeFilePath)
                 this.storePassword = storePassword
                 this.keyAlias = keyAlias
                 this.keyPassword = keyPassword
@@ -66,7 +68,6 @@ android {
                 abiFilters.clear()
                 abiFilters.add("arm64-v8a")
             }
-            versionNameSuffix = "-arm64"
         }
         create("x86_64") {
             dimension = "abi"
@@ -74,7 +75,6 @@ android {
                 abiFilters.clear()
                 abiFilters.add("x86_64")
             }
-            versionNameSuffix = "-x86_64"
         }
     }
 

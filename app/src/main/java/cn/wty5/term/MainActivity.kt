@@ -168,8 +168,8 @@ class MainActivity : AppCompatActivity() {
             terminalView.focusTerminal()
         }
 
-        findViewById<Button>(R.id.btn_key_ctrl_d).setOnClickListener {
-            viewModel.writeRawInput("\u0004")
+        findViewById<Button>(R.id.btn_key_pipe).setOnClickListener {
+            viewModel.writeRawInput("|")
             terminalView.focusTerminal()
         }
 
@@ -266,11 +266,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_REPEAT_INITIAL_MS = 350L
         /** Interval between repeated key events while held (ms). */
         private const val KEY_REPEAT_INTERVAL_MS = 45L
-    }
-
-    private fun Int.dpToPx(): Int {
-        val density = resources.displayMetrics.density
-        return (this * density).toInt()
     }
 
 }

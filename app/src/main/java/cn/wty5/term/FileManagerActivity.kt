@@ -90,8 +90,6 @@ class FileManagerActivity : AppCompatActivity() {
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(true)
-        toolbar.title = getString(R.string.file_manager_title)
-        toolbar.subtitle = getString(R.string.file_manager_subtitle)
 
         drawerToggle = ActionBarDrawerToggle(
             this,
@@ -229,9 +227,8 @@ class FileManagerActivity : AppCompatActivity() {
                         getString(R.string.sidebar_target_right)
                     }
                     val activePath = if (activeIsLeft) state.left.path else state.right.path
-                    val panelLabel = if (activeIsLeft) "LEFT" else "RIGHT"
-                    toolbar.subtitle = "$panelLabel / $activePath"
-
+                    toolbar.title = activePath
+                    toolbar.subtitle = String.format(getString(R.string.file_manager_subtitle), 0, 1, "0.00G", "100.00G")
                     placesAdapter.submit(
                         places = state.places,
                         activePath = activePath

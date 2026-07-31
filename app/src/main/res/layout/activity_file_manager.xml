@@ -24,13 +24,8 @@
             app:popupTheme="@style/ThemeOverlay.AppCompat.Dark"
             app:subtitleTextAppearance="@style/TextAppearance.AppCompat.Caption"
             app:subtitleTextColor="@color/fm_accent"
-            app:title="@string/file_manager_title"
+            app:title="@string/file_manager_current_path"
             app:titleTextColor="@color/fm_text_primary" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/fm_stroke" />
 
         <!-- Dual panels -->
         <LinearLayout

@@ -8,7 +8,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.TextPaint
@@ -30,8 +29,13 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.graphics.toColorInt
 import cn.wty5.term.terminal.AnsiParser
+import cn.wty5.term.ui.utils.spToPx
 import java.util.ArrayDeque
+import kotlin.math.abs
+import kotlin.math.hypot
 
 class TerminalView @JvmOverloads constructor(
     context: Context,
@@ -66,7 +70,6 @@ class TerminalView @JvmOverloads constructor(
                 (code in 0xFE30..0xFE6F) ||
                 (code in 0xFF00..0xFF60) ||
                 (code in 0xFFE0..0xFFE6) ||
-                (code in 0x3000..0x303F) ||
                 Character.isSurrogate(c) // emoji / astral plane — pair handled in putChar
     }
 
@@ -133,7 +136,7 @@ class TerminalView @JvmOverloads constructor(
     // Measure properties
     private val textPaint = TextPaint().apply {
         typeface = Typeface.MONOSPACE
-        textSize = spToPx(13f)
+        textSize = context.spToPx(13f)
         isAntiAlias = true
     }
     private val bgPaint = Paint().apply {
@@ -214,11 +217,11 @@ class TerminalView @JvmOverloads constructor(
                 val factor = detector.scaleFactor
                 val oldSize = textPaint.textSize
                 var newSize = oldSize * factor
-                val minSize = spToPx(8f)
-                val maxSize = spToPx(40f)
+                val minSize = context.spToPx(8f)
+                val maxSize = context.spToPx(40f)
                 newSize = newSize.coerceIn(minSize, maxSize)
 
-                if (Math.abs(newSize - oldSize) > 0.1f) {
+                if (abs(newSize - oldSize) > 0.1f) {
                     textPaint.textSize = newSize
                     recalculateDimensions()
                     invalidate()
@@ -240,10 +243,6 @@ class TerminalView @JvmOverloads constructor(
 
         // Initialize with one empty line
         lines.add(VisualLine())
-    }
-
-    private fun spToPx(sp: Float): Float {
-        return sp * resources.displayMetrics.scaledDensity
     }
 
     private fun reflow(newCols: Int) {
@@ -270,8 +269,7 @@ class TerminalView @JvmOverloads constructor(
         var accumChars = 0
         val coercedCursorRow = cursorRow.coerceIn(0, lines.size - 1)
 
-        for (i in 0 until lines.size) {
-            val line = lines[i]
+        for ((i, line) in lines.withIndex()) {
             if (i == coercedCursorRow) {
                 cursorLogicalRow = currentLogicalIndex
                 cursorLogicalCol = accumChars + cursorCol
@@ -288,9 +286,7 @@ class TerminalView @JvmOverloads constructor(
         var newCursorRow = 0
         var newCursorCol = 0
 
-        for (lIdx in 0 until logicalLines.size) {
-            val logical = logicalLines[lIdx]
-
+        for ((lIdx, logical) in logicalLines.withIndex()) {
             if (logical.isEmpty()) {
                 if (lIdx == cursorLogicalRow) {
                     newCursorRow = newLines.size
@@ -419,8 +415,8 @@ class TerminalView @JvmOverloads constructor(
             var selFrom = -1
             var selTo = -1
             if (hasSel) {
-                val minR = sMin!!.row
-                val maxR = sMax!!.row
+                val minR = sMin.row
+                val maxR = sMax.row
                 if (lineIdx in minR..maxR) {
                     selFrom = if (lineIdx == minR) sMin.col else 0
                     selTo = if (lineIdx == maxR) sMax.col else Int.MAX_VALUE
@@ -519,9 +515,10 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
-// Cursor
-        val showCursor = cursorVisible && !cursorHiddenByMode && cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size
-        if (showCursor && cursorRow >= startLine && cursorRow < endLine) {
+        // Cursor
+        val showCursor =
+            cursorVisible && !cursorHiddenByMode && cursorRow < lines.size && cursorCol <= lines[cursorRow].chars.size
+        if (showCursor && cursorRow in startLine..<endLine) {
             val isCursorFullWidth =
                 if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {
                     lines[cursorRow].chars[cursorCol].isFullWidth
@@ -578,7 +575,7 @@ class TerminalView @JvmOverloads constructor(
         if (isSelecting && sMin != null && sMax != null) {
             val r = dpToPx(12f)
 
-            if (sMin.row >= startLine && sMin.row < endLine) {
+            if (sMin.row in startLine..<endLine) {
                 val leftTipX = padL + sMin.col * chW
                 val leftTipY = (padT + (sMin.row - startLine + 1) * chH).toFloat()
                 val cx = leftTipX - r
@@ -592,7 +589,7 @@ class TerminalView @JvmOverloads constructor(
                 canvas.drawPath(leftHandlePath, handlePaint)
             }
 
-            if (sMax.row >= startLine && sMax.row < endLine) {
+            if (sMax.row in startLine..<endLine) {
                 val rightTipX = padL + (sMax.col + 1) * chW
                 val rightTipY = (padT + (sMax.row - startLine + 1) * chH).toFloat()
                 val cx = rightTipX + r
@@ -653,9 +650,9 @@ class TerminalView @JvmOverloads constructor(
                     val rightCy = rightTipY + r
 
                     val distLeft =
-                        Math.hypot((event.x - leftCx).toDouble(), (event.y - leftCy).toDouble())
+                        hypot((event.x - leftCx).toDouble(), (event.y - leftCy).toDouble())
                     val distRight =
-                        Math.hypot((event.x - rightCx).toDouble(), (event.y - rightCy).toDouble())
+                        hypot((event.x - rightCx).toDouble(), (event.y - rightCy).toDouble())
 
                     if (distLeft < hitRadius && distLeft < distRight) {
                         if (sStart < sEnd) {
@@ -682,8 +679,8 @@ class TerminalView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = Math.abs(event.x - startX)
-                val dy = Math.abs(event.y - startY)
+                val dx = abs(event.x - startX)
+                val dy = abs(event.y - startY)
                 val slop = ViewConfiguration.get(context).scaledTouchSlop
 
                 if (dx > slop || dy > slop) {
@@ -744,8 +741,8 @@ class TerminalView @JvmOverloads constructor(
                     return true
                 }
 
-                val dx = Math.abs(event.x - startX)
-                val dy = Math.abs(event.y - startY)
+                val dx = abs(event.x - startX)
+                val dy = abs(event.y - startY)
                 val slop = ViewConfiguration.get(context).scaledTouchSlop
                 val isClick = dx < slop && dy < slop
 
@@ -758,18 +755,20 @@ class TerminalView @JvmOverloads constructor(
                             val minPos = if (sStart < sEnd) sStart else sEnd
                             val maxPos = if (sStart < sEnd) sEnd else sStart
 
-                            if (clickPos >= minPos && clickPos <= maxPos) {
+                            if (clickPos in minPos..maxPos) {
                                 showSelectionMenu(event.x, event.y)
                             } else {
                                 clearSelection()
                                 dismissSelectionMenu()
                                 focusTerminal()
+                                showKeyboard()
                                 performClick()
                             }
                         } else {
                             clearSelection()
                             dismissSelectionMenu()
                             focusTerminal()
+                            showKeyboard()
                             performClick()
                         }
                     }
@@ -778,6 +777,7 @@ class TerminalView @JvmOverloads constructor(
                         clearSelection()
                         dismissSelectionMenu()
                         focusTerminal()
+                        showKeyboard()
                         performClick()
                     }
                 }
@@ -803,6 +803,9 @@ class TerminalView @JvmOverloads constructor(
         if (!isFocused) {
             requestFocus()
         }
+    }
+
+    fun showKeyboard() {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
@@ -814,7 +817,7 @@ class TerminalView @JvmOverloads constructor(
 
     override fun onCheckIsTextEditor(): Boolean = true
 
-    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
         outAttrs.inputType =
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_NORMAL or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE
@@ -847,15 +850,21 @@ class TerminalView @JvmOverloads constructor(
 
         if (event.isCtrlPressed) {
             val char = event.getUnicodeChar(0).toChar().lowercaseChar()
-            if (char == 'c') {
-                onInputListener?.invoke("\u0003") // Ctrl+C
-                return true
-            } else if (char == 'd') {
-                onInputListener?.invoke("\u0004") // Ctrl+D
-                return true
-            } else if (char == 'l') {
-                onInputListener?.invoke("\u000C") // Ctrl+L (Form Feed / Clear)
-                return true
+            when (char) {
+                'c' -> {
+                    onInputListener?.invoke("\u0003") // Ctrl+C
+                    return true
+                }
+
+                'd' -> {
+                    onInputListener?.invoke("\u0004") // Ctrl+D
+                    return true
+                }
+
+                'l' -> {
+                    onInputListener?.invoke("\u000C") // Ctrl+L (Form Feed / Clear)
+                    return true
+                }
             }
         }
 
@@ -945,10 +954,6 @@ class TerminalView @JvmOverloads constructor(
     private fun applyOutputChunk(ansiText: String) {
         val events = ansiParser.parseEvents(ansiText)
 
-        // Readline history redraw often does: CR + rewrite shorter text [+ ESC[K].
-        var sawCr = false
-        var wroteAfterCr = false
-        var erasedAfterCr = false
         // High-surrogate holdover for multi-chunk UTF-16 pairs (rare after PTY UTF-8 decode).
         var pendingHigh: Char? = null
 
@@ -975,32 +980,19 @@ class TerminalView @JvmOverloads constructor(
                     } else {
                         putChar(ch, event.style)
                     }
-                    if (sawCr) wroteAfterCr = true
                 }
 
                 is AnsiParser.Event.NewLine -> {
                     if (cursorRow < lines.size) {
                         lines[cursorRow].isSoftWrapped = false
                     }
-                    if (sawCr && wroteAfterCr && !erasedAfterCr) {
-                        eraseInLine(0)
-                    }
-                    sawCr = false
-                    wroteAfterCr = false
-                    erasedAfterCr = false
                     cursorRow++
                     cursorCol = 0
                     ensureLine(cursorRow)
                 }
 
                 is AnsiParser.Event.CarriageReturn -> {
-                    if (sawCr && wroteAfterCr && !erasedAfterCr) {
-                        eraseInLine(0)
-                    }
                     cursorCol = 0
-                    sawCr = true
-                    wroteAfterCr = false
-                    erasedAfterCr = false
                 }
 
                 is AnsiParser.Event.Backspace -> {
@@ -1047,22 +1039,18 @@ class TerminalView @JvmOverloads constructor(
 
                 is AnsiParser.Event.EraseInLine -> {
                     eraseInLine(event.mode)
-                    if (sawCr) erasedAfterCr = true
                 }
 
                 is AnsiParser.Event.EraseInDisplay -> {
                     eraseInDisplay(event.mode)
-                    if (sawCr) erasedAfterCr = true
                 }
 
                 is AnsiParser.Event.EraseChars -> {
                     eraseChars(event.n)
-                    if (sawCr) erasedAfterCr = true
                 }
 
                 is AnsiParser.Event.DeleteChars -> {
                     deleteChars(event.n)
-                    if (sawCr) erasedAfterCr = true
                 }
 
                 is AnsiParser.Event.InsertChars -> {
@@ -1094,10 +1082,6 @@ class TerminalView @JvmOverloads constructor(
             // Lone high surrogate at chunk end — drop; next chunk may complete it.
             // Keep it only if we want fidelity; safest is to render replacement.
             putChar(pendingHigh, AnsiParser.TextStyle())
-        }
-
-        if (sawCr && wroteAfterCr && !erasedAfterCr) {
-            eraseInLine(0)
         }
 
         trimScrollback()
@@ -1159,7 +1143,7 @@ class TerminalView @JvmOverloads constructor(
         altScreenActive = false
         mainLines = null
         lines.clear()
-        if (saved != null && saved.isNotEmpty()) {
+        if (!saved.isNullOrEmpty()) {
             lines.addAll(saved)
             cursorRow = mainCursorRow.coerceIn(0, lines.size - 1)
             cursorCol = mainCursorCol
@@ -1194,7 +1178,7 @@ class TerminalView @JvmOverloads constructor(
     }
 
     private fun blankChar(): StyledChar =
-        StyledChar(' ', defaultFg, defaultBg, false, false)
+        StyledChar(' ', defaultFg, defaultBg, isBold = false, isUnderline = false)
 
     private fun eraseInLine(mode: Int) {
         ensureLine(cursorRow)
@@ -1566,9 +1550,9 @@ class TerminalView @JvmOverloads constructor(
             orientation = LinearLayout.HORIZONTAL
             setPadding(8, 8, 8, 8)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#25282C"))
+                setColor("#25282C".toColorInt())
                 cornerRadius = 24f
-                setStroke(2, Color.parseColor("#3D4146"))
+                setStroke(2, "#3D4146".toColorInt())
             }
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -1582,7 +1566,7 @@ class TerminalView @JvmOverloads constructor(
         if (hasSelection) {
             val copyButton = TextView(ctx).apply {
                 text = " 复制 "
-                setTextColor(Color.parseColor("#E2E2E6"))
+                setTextColor("#E2E2E6".toColorInt())
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
                 setPadding(24, 16, 24, 16)
@@ -1602,7 +1586,7 @@ class TerminalView @JvmOverloads constructor(
         if (hasClipboardText) {
             val pasteButton = TextView(ctx).apply {
                 text = " 粘贴 "
-                setTextColor(Color.parseColor("#E2E2E6"))
+                setTextColor("#E2E2E6".toColorInt())
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
                 setPadding(24, 16, 24, 16)
@@ -1622,7 +1606,7 @@ class TerminalView @JvmOverloads constructor(
 
         val selectAllButton = TextView(ctx).apply {
             text = " 全选 "
-            setTextColor(Color.parseColor("#A8C7FA"))
+            setTextColor("#A8C7FA".toColorInt())
             textSize = 14f
             setPadding(24, 16, 24, 16)
             isClickable = true
@@ -1640,7 +1624,7 @@ class TerminalView @JvmOverloads constructor(
 
         val cancelButton = TextView(ctx).apply {
             text = " 取消 "
-            setTextColor(Color.parseColor("#8E9199"))
+            setTextColor("#8E9199".toColorInt())
             textSize = 14f
             setPadding(24, 16, 24, 16)
             isClickable = true
@@ -1664,7 +1648,7 @@ class TerminalView @JvmOverloads constructor(
             isOutsideTouchable = true
             isFocusable = false
             elevation = 20f
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
 
             val location = IntArray(2)
             getLocationOnScreen(location)
@@ -1710,8 +1694,6 @@ class TerminalView @JvmOverloads constructor(
         }
     }
 
-    fun getTextView(): TextView = TextView(context)
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         postDelayed(blinkRunnable, 500)
@@ -1728,10 +1710,10 @@ class TerminalView @JvmOverloads constructor(
         /** Soft scrollback cap for the primary screen buffer. */
         private const val MAX_SCROLLBACK_LINES = 5000
 
-        private val COLOR_DEFAULT_FG = Color.parseColor("#E2E2E6")
-        private val COLOR_DEFAULT_BG = Color.parseColor("#000000")
-        private val COLOR_CURSOR = Color.parseColor("#A8C7FA")
-        private val COLOR_SELECTION = Color.parseColor("#4285F4")
+        private val COLOR_DEFAULT_FG = "#E2E2E6".toColorInt()
+        private val COLOR_DEFAULT_BG = "#000000".toColorInt()
+        private val COLOR_CURSOR = "#A8C7FA".toColorInt()
+        private val COLOR_SELECTION = "#4285F4".toColorInt()
     }
 }
 

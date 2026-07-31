@@ -3,8 +3,8 @@
     <string name="app_name">TermExplorer</string>
     <string name="back_to_terminal">Back to terminal</string>
     <string name="terminal_view_desc">Terminal view</string>
-    <string name="file_manager_title">Dual-Pane Explorer</string>
-    <string name="file_manager_subtitle">Tap to focus · Long-press for options</string>
+    <string name="file_manager_current_path">/storage/emulated/0/</string>
+    <string name="file_manager_subtitle">folder: %d file: %d usage: %s/%s</string>
     <string name="panel_left">LEFT</string>
     <string name="panel_right">RIGHT</string>
     <string name="panel_left_active">LEFT · ACTIVE</string>

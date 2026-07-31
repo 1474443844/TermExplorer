@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import cn.wty5.term.terminal.TermConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,6 +25,8 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.ln
+import kotlin.math.pow
 
 /**
  * ViewModel for [cn.wty5.term.FileManagerActivity].
@@ -88,8 +91,7 @@ class FileManagerViewModel(
 
     enum class Op { COPY, MOVE }
 
-    val sandboxDirectory: File =
-        File(application.filesDir, "workspace").also { if (!it.exists()) it.mkdirs() }
+    val sandboxDirectory: File = TermConfig.homeDir.also { if (!it.exists()) it.mkdirs() }
     val sdcardDirectory: File = Environment.getExternalStorageDirectory()
     val appFilesDirectory: File = application.filesDir
 
@@ -609,9 +611,9 @@ class FileManagerViewModel(
 
     private fun formatSize(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
-        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+        val exp = (ln(bytes.toDouble()) / ln(1024.0)).toInt()
         val pre = "KMGTPE"[exp - 1] + "B"
-        return String.format(Locale.US, "%.1f %s", bytes / Math.pow(1024.0, exp.toDouble()), pre)
+        return String.format(Locale.US, "%.1f %s", bytes / 1024.0.pow(exp.toDouble()), pre)
     }
 
     private fun iconFor(file: File): String {

@@ -24,7 +24,6 @@
             android:layout_height="wrap_content"
             android:background="#151719"
             android:columnCount="7"
-            android:padding="4dp"
             android:rowCount="3"
             android:useDefaultMargins="false">
 
@@ -33,21 +32,21 @@
             <Button android:id="@+id/btn_key_ctrl" style="@style/TermKeyButton" android:text="CTRL" />
             <Button android:id="@+id/btn_key_alt" style="@style/TermKeyButton" android:text="ALT" />
             <Button android:id="@+id/btn_key_minus" style="@style/TermKeyButton" android:text="-" />
-            <Button android:id="@+id/btn_key_up" style="@style/TermKeyButton" android:text="▲" />
+            <Button android:id="@+id/btn_key_up" style="@style/TermKeyButton" android:text="↑" />
             <Button android:id="@+id/btn_key_enter" style="@style/TermKeyButton" android:text="↵" />
 
             <Button android:id="@+id/btn_key_ins" style="@style/TermKeyButton" android:text="INS" />
             <Button android:id="@+id/btn_key_end" style="@style/TermKeyButton" android:text="END" />
             <Button android:id="@+id/btn_key_shift" style="@style/TermKeyButton" android:text="SHIFT" />
             <Button android:id="@+id/btn_key_home" style="@style/TermKeyButton" android:text="HOME" />
-            <Button android:id="@+id/btn_key_left" style="@style/TermKeyButton" android:text="◀" />
-            <Button android:id="@+id/btn_key_down" style="@style/TermKeyButton" android:text="▼" />
-            <Button android:id="@+id/btn_key_right" style="@style/TermKeyButton" android:text="▶" />
+            <Button android:id="@+id/btn_key_left" style="@style/TermKeyButton" android:text="←" />
+            <Button android:id="@+id/btn_key_down" style="@style/TermKeyButton" android:text="↓" />
+            <Button android:id="@+id/btn_key_right" style="@style/TermKeyButton" android:text="→" />
 
             <Button android:id="@+id/btn_key_pgup" style="@style/TermKeyButton" android:text="PgUp" />
             <Button android:id="@+id/btn_key_pgdn" style="@style/TermKeyButton" android:text="PgDn" />
-            <Button android:id="@+id/btn_key_ctrl_c" style="@style/TermKeyButton" android:text="Ctrl+c" />
-            <Button android:id="@+id/btn_key_ctrl_d" style="@style/TermKeyButton" android:text="Ctrl+d" />
+            <Button android:id="@+id/btn_key_ctrl_c" style="@style/TermKeyButton" android:text="Ctrl+C" />
+            <Button android:id="@+id/btn_key_pipe" style="@style/TermKeyButton" android:text="|" />
             <Button android:id="@+id/btn_key_fm" style="@style/TermKeyButton" android:text="fm" />
             <Button android:id="@+id/btn_key_sb" style="@style/TermKeyButton" android:text="sb" />
             <Button android:id="@+id/btn_key_ss" style="@style/TermKeyButton" android:text="ss" />

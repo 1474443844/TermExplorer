@@ -7,15 +7,13 @@
         <item name="android:layout_height">36dp</item>
         <item name="android:layout_columnWeight">1</item>
         <item name="android:layout_gravity">fill_horizontal</item>
-        <item name="android:layout_margin">1dp</item>
-        <item name="android:background">#252729</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
         <item name="android:padding">0dp</item>
         <item name="android:textColor">#C4C6CF</item>
-        <item name="android:textSize">10sp</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:minWidth">0dp</item>
         <item name="android:minHeight">0dp</item>
-        <item name="android:stateListAnimator">@null</item>
     </style>
 
     <!-- File manager bottom action buttons -->

@@ -519,8 +519,8 @@ class TerminalView @JvmOverloads constructor(
             }
         }
 
-        // Cursor
-        val showCursor = cursorVisible && !cursorHiddenByMode
+// Cursor
+        val showCursor = cursorVisible && !cursorHiddenByMode && cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size
         if (showCursor && cursorRow >= startLine && cursorRow < endLine) {
             val isCursorFullWidth =
                 if (cursorRow < lines.size && cursorCol < lines[cursorRow].chars.size) {

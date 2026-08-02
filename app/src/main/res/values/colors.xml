@@ -9,7 +9,7 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- File manager palette -->
-    <color name="fm_bg">#0B0D10</color>
+    <color name="fm_bg">#303030</color>
     <color name="fm_surface">#12151A</color>
     <color name="fm_surface_2">#1A1F27</color>
     <color name="fm_surface_3">#232A34</color>

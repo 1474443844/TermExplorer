@@ -5,37 +5,71 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- ========== Main content ========== -->
+    <!-- ========== 主体内容区域 ========== -->
+    <!-- 紧凑型双面板容器 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/fm_bg"
         android:orientation="vertical">
 
+        <!-- 扁平化原生标题栏 -->
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/fm_toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/fm_surface"
-            android:elevation="2dp"
+            android:elevation="1dp"
             android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
             app:contentInsetStartWithNavigation="0dp"
             app:navigationContentDescription="@string/sidebar_open"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Dark"
-            app:subtitleTextAppearance="@style/TextAppearance.AppCompat.Caption"
-            app:subtitleTextColor="@color/fm_accent"
-            app:title="@string/file_manager_current_path"
-            app:titleTextColor="@color/fm_text_primary" />
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Dark">
 
-        <!-- Dual panels -->
+            <!-- 自定义标题与副标题布局 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:orientation="vertical">
+
+                <!-- 路径标题：强制单行，开头省略 -->
+                <TextView
+                    android:id="@+id/tv_toolbar_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="start"
+                    android:singleLine="true"
+                    android:textColor="@color/fm_text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <!-- 容量副标题：强制单行，末尾省略 -->
+                <TextView
+                    android:id="@+id/tv_toolbar_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="@color/fm_accent"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+        </androidx.appcompat.widget.Toolbar>
+
+        <!-- 紧凑型双面板容器 -->
+        <!-- 紧凑型双面板容器 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:baselineAligned="false"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:orientation="horizontal"
-            android:padding="8dp">
+            android:padding="6dp">
 
+            <!-- 左面板 -->
             <include
                 android:id="@+id/layout_panel_left"
                 layout="@layout/include_file_panel"
@@ -43,10 +77,12 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1" />
 
+            <!-- 中间分割缝隙 -->
             <View
-                android:layout_width="8dp"
+                android:layout_width="6dp"
                 android:layout_height="match_parent" />
 
+            <!-- 右面板 -->
             <include
                 android:id="@+id/layout_panel_right"
                 layout="@layout/include_file_panel"
@@ -55,52 +91,65 @@
                 android:layout_weight="1" />
         </LinearLayout>
 
-        <!-- Bottom action bar -->
+        <!-- MT风格 底部紧凑动作栏 (使用原生无边框按钮样式) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@color/fm_surface"
+            android:elevation="4dp"
             android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="10dp">
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="2dp">
 
-            <Button
-                android:id="@+id/btn_action_copy"
-                style="@style/FmActionButton"
-                android:backgroundTint="@color/fm_success"
-                android:text="@string/action_copy" />
+            <ImageButton
+                android:id="@+id/btn_action_undo"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:src="@drawable/baseline_keyboard_arrow_left_24"
+                android:tint="@color/fm_text_primary" />
 
-            <Button
-                android:id="@+id/btn_action_move"
-                style="@style/FmActionButton"
-                android:backgroundTint="@color/fm_warning"
-                android:text="@string/action_move" />
+            <ImageButton
+                android:id="@+id/btn_action_redo"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:src="@drawable/baseline_keyboard_arrow_right_24"
+                android:tint="@color/fm_text_primary" />
 
-            <Button
-                android:id="@+id/btn_action_rename"
-                style="@style/FmActionButton"
-                android:backgroundTint="@color/fm_info"
-                android:text="@string/action_rename" />
+            <ImageButton
+                android:id="@+id/btn_action_create"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:contentDescription="Create File/Folder"
+                android:src="@drawable/baseline_add_24"
+                android:tint="@color/fm_text_primary" />
 
-            <Button
-                android:id="@+id/btn_action_delete"
-                style="@style/FmActionButton"
-                android:backgroundTint="@color/fm_danger"
-                android:text="@string/action_delete" />
+            <ImageButton
+                android:id="@+id/btn_action_sync"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:src="@drawable/baseline_arrow_team_24_left"
+                android:tint="@color/fm_text_primary" />
 
-            <Button
-                android:id="@+id/btn_action_new_file"
-                style="@style/FmActionButton"
-                android:text="@string/action_new_file" />
-
-            <Button
-                android:id="@+id/btn_action_new_folder"
-                style="@style/FmActionButton"
-                android:text="@string/action_new_folder" />
+            <ImageButton
+                android:id="@+id/btn_action_goback"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:src="@drawable/baseline_arrow_upward_24"
+                android:tint="@color/fm_text_primary" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ========== Left sidebar drawer ========== -->
+    <!-- ========== 侧边栏抽屉 (原生 LinearLayout 结构) ========== -->
     <LinearLayout
         android:id="@+id/fm_sidebar"
         android:layout_width="300dp"
@@ -108,41 +157,28 @@
         android:layout_gravity="start"
         android:background="@color/fm_surface"
         android:clickable="true"
+        android:elevation="8dp"
         android:focusable="true"
-        android:orientation="vertical"
-        android:paddingTop="12dp">
+        android:orientation="vertical">
 
+        <!-- 侧栏头部 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="14dp"
-            android:paddingBottom="10dp">
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp">
 
-            <LinearLayout
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/sidebar_title"
-                    android:textColor="@color/fm_text_primary"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tv_sidebar_active_panel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="@string/sidebar_target_left"
-                    android:textColor="@color/fm_accent"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                android:text="@string/sidebar_title"
+                android:textColor="@color/fm_text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btn_sidebar_refresh"
@@ -150,7 +186,7 @@
                 android:layout_height="34dp"
                 android:background="@drawable/bg_fm_chip"
                 android:minWidth="0dp"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="12dp"
                 android:stateListAnimator="@null"
                 android:text="@string/sidebar_refresh"
                 android:textColor="@color/fm_text_primary"
@@ -166,7 +202,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="14dp"
+            android:paddingHorizontal="16dp"
             android:paddingTop="12dp"
             android:paddingBottom="6dp"
             android:text="@string/sidebar_places"
@@ -174,13 +210,14 @@
             android:textSize="11sp"
             android:textStyle="bold" />
 
+        <!-- 侧栏书签列表 -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_sidebar_places"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:paddingHorizontal="10dp"
+            android:paddingHorizontal="12dp"
             android:paddingBottom="8dp"
             android:scrollbars="vertical" />
 
@@ -189,16 +226,17 @@
             android:layout_height="1dp"
             android:background="@color/fm_stroke" />
 
+        <!-- 侧栏尾部按钮 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="16dp">
 
             <Button
                 android:id="@+id/btn_sidebar_swap_panels"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
+                android:layout_height="40dp"
                 android:background="@drawable/bg_fm_chip"
                 android:stateListAnimator="@null"
                 android:text="@string/sidebar_swap_panels"
@@ -209,7 +247,7 @@
             <Button
                 android:id="@+id/btn_sidebar_same_both"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
+                android:layout_height="40dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/bg_fm_chip"
                 android:stateListAnimator="@null"

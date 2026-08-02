@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/layout_file_item"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="6dp"
-    android:background="@drawable/bg_fm_item"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="10dp"
-    android:paddingVertical="10dp">
+    android:paddingHorizontal="4dp"
+    android:paddingVertical="4dp">
 
-    <TextView
-        android:id="@+id/tv_item_icon"
+    <ImageView
+        android:id="@+id/iv_item_icon"
         android:layout_width="28dp"
-        android:layout_height="wrap_content"
+        android:layout_height="28dp"
         android:gravity="center"
-        android:text="📄"
-        android:textSize="15sp" />
+        app:tint="@color/fm_text_primary"
+        android:background="@drawable/bg_fm_item_icon"
+        android:padding="4dp"
+        android:src="@drawable/baseline_folder_24" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -47,13 +48,4 @@
             android:textColor="@color/fm_text_muted"
             android:textSize="10sp" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/tv_item_menu"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:text="⋮"
-        android:textColor="@color/fm_text_secondary"
-        android:textSize="16sp" />
 </LinearLayout>

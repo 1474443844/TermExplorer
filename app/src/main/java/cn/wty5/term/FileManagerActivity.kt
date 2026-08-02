@@ -5,11 +5,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -17,8 +14,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -31,16 +31,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import cn.wty5.term.viewmodel.FileManagerViewModel
 import cn.wty5.term.viewmodel.FileManagerViewModelFactory
 import kotlinx.coroutines.launch
 import java.io.File
 
-/**
- * Dual-pane file manager UI. Business state/IO live in [FileManagerViewModel].
- */
 class FileManagerActivity : AppCompatActivity() {
 
     private lateinit var viewModel: FileManagerViewModel
@@ -50,18 +49,19 @@ class FileManagerActivity : AppCompatActivity() {
     private lateinit var leftPanel: PanelViews
     private lateinit var rightPanel: PanelViews
     private lateinit var placesAdapter: PlacesAdapter
-    private lateinit var tvSidebarActivePanel: TextView
+    private lateinit var tvToolbarTitle: TextView
+    private lateinit var tvToolbarSubtitle: TextView
 
     private var activeEditorDialog: AlertDialog? = null
-    private var suppressFilterCallback = false
+    private var activeConfirmDialog: AlertDialog? = null
     private var pendingSdPanel: FileManagerViewModel.Panel = FileManagerViewModel.Panel.LEFT
+
+    // 缓存上一次渲染完毕时的路径，以此判断是否由于目录切换需要暂存滚动数据
+    private var lastRenderedLeftPath: String? = null
+    private var lastRenderedRightPath: String? = null
 
     private data class PanelViews(
         val root: View,
-        val title: TextView,
-        val cwdBanner: TextView,
-        val storageCapacity: TextView,
-        val filter: EditText,
         val adapter: FileListAdapter
     )
 
@@ -76,20 +76,23 @@ class FileManagerActivity : AppCompatActivity() {
 
         drawerLayout = findViewById(R.id.fm_drawer_layout)
         toolbar = findViewById(R.id.fm_toolbar)
-        tvSidebarActivePanel = findViewById(R.id.tv_sidebar_active_panel)
+
+        tvToolbarTitle = findViewById(R.id.tv_toolbar_title)
+        tvToolbarSubtitle = findViewById(R.id.tv_toolbar_subtitle)
 
         setupToolbar()
         leftPanel = bindPanel(findViewById(R.id.layout_panel_left), FileManagerViewModel.Panel.LEFT)
         rightPanel = bindPanel(findViewById(R.id.layout_panel_right), FileManagerViewModel.Panel.RIGHT)
         setupSidebar()
         setupActions()
+        setupBackPressed()
         collectState()
         collectEvents()
     }
 
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayShowTitleEnabled(true)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
 
         drawerToggle = ActionBarDrawerToggle(
             this,
@@ -100,9 +103,21 @@ class FileManagerActivity : AppCompatActivity() {
         )
         drawerLayout.addDrawerListener(drawerToggle)
         drawerToggle.syncState()
-        // Keep custom hamburger tinted for dark chrome.
         drawerToggle.drawerArrowDrawable.color =
             ContextCompat.getColor(this, R.color.fm_text_primary)
+    }
+
+    private fun setupBackPressed() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    drawerLayout.closeDrawer(GravityCompat.START)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -128,7 +143,6 @@ class FileManagerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // If user just granted all-files access in system settings, continue pending place.
         viewModel.onStorageAccessGranted(pendingSdPanel)
         viewModel.refreshBoth()
     }
@@ -164,77 +178,99 @@ class FileManagerActivity : AppCompatActivity() {
             setHasFixedSize(true)
             itemAnimator = null
         }
-        val filter = root.findViewById<EditText>(R.id.et_file_filter)
-        filter.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (!suppressFilterCallback) {
-                    viewModel.setFilter(panel, s?.toString().orEmpty())
-                }
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
 
         root.setOnClickListener { viewModel.setActivePanel(panel) }
-        root.findViewById<Button>(R.id.btn_go_sandbox).setOnClickListener {
-            viewModel.goSandbox(panel)
-        }
-        root.findViewById<Button>(R.id.btn_go_sdcard).setOnClickListener {
-            pendingSdPanel = panel
-            viewModel.requestSdCard(panel)
-        }
 
         return PanelViews(
             root = root,
-            title = root.findViewById(R.id.tv_panel_title),
-            cwdBanner = root.findViewById(R.id.tv_cwd_banner),
-            storageCapacity = root.findViewById(R.id.tv_storage_capacity),
-            filter = filter,
             adapter = adapter
         )
     }
 
     private fun setupActions() {
-        findViewById<Button>(R.id.btn_action_copy).setOnClickListener { viewModel.requestCopy() }
-        findViewById<Button>(R.id.btn_action_move).setOnClickListener { viewModel.requestMove() }
-        findViewById<Button>(R.id.btn_action_rename).setOnClickListener { viewModel.requestRename() }
-        findViewById<Button>(R.id.btn_action_delete).setOnClickListener { viewModel.requestDelete() }
-        findViewById<Button>(R.id.btn_action_new_file).setOnClickListener { viewModel.requestNewFile() }
-        findViewById<Button>(R.id.btn_action_new_folder).setOnClickListener { viewModel.requestNewFolder() }
+        // 修正了各按键错位的绑定映射关系
+        findViewById<ImageButton>(R.id.btn_action_undo).setOnClickListener { viewModel.requestUndo() }
+        findViewById<ImageButton>(R.id.btn_action_redo).setOnClickListener { viewModel.requestRedo() }
+
+        findViewById<ImageButton>(R.id.btn_action_create).setOnClickListener {
+            showCreateOptionsDialog()
+        }
+        findViewById<ImageButton>(R.id.btn_action_sync).setOnClickListener { viewModel.mirrorActiveToOther() }
+        findViewById<ImageButton>(R.id.btn_action_goback).setOnClickListener {
+            val activeDir = viewModel.activeDir()
+            activeDir.parentFile?.let { parent ->
+                viewModel.openParent(viewModel.uiState.value.activePanel, parent)
+            }
+        }
+    }
+
+    private fun showCreateOptionsDialog() {
+        activeConfirmDialog?.dismiss()
+        activeConfirmDialog = AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+            .setTitle("Create New")
+            .setItems(arrayOf("File", "Folder")) { _, which ->
+                if (which == 0) viewModel.requestNewFile() else viewModel.requestNewFolder()
+            }
+            .show()
     }
 
     private fun collectState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    renderPanel(
-                        leftPanel,
-                        state.left,
-                        state.activePanel == FileManagerViewModel.Panel.LEFT,
-                        true
-                    )
-                    renderPanel(
-                        rightPanel,
-                        state.right,
-                        state.activePanel == FileManagerViewModel.Panel.RIGHT,
-                        false
-                    )
+                    renderPanel(leftPanel, state.left, FileManagerViewModel.Panel.LEFT)
+                    renderPanel(rightPanel, state.right, FileManagerViewModel.Panel.RIGHT)
 
+                    // 核心视觉交互：动态更新阴影与透明度
                     val activeIsLeft = state.activePanel == FileManagerViewModel.Panel.LEFT
-                    tvSidebarActivePanel.text = if (activeIsLeft) {
-                        getString(R.string.sidebar_target_left)
-                    } else {
-                        getString(R.string.sidebar_target_right)
-                    }
+                    applyPanelFocusEffect(leftPanel.root, activeIsLeft)
+                    applyPanelFocusEffect(rightPanel.root, !activeIsLeft)
+
                     val activePath = if (activeIsLeft) state.left.path else state.right.path
-                    toolbar.title = activePath
-                    toolbar.subtitle = String.format(getString(R.string.file_manager_subtitle), 0, 1, "0.00G", "100.00G")
+                    tvToolbarTitle.text = activePath
+
+                    val activePanelUi = if (activeIsLeft) state.left else state.right
+                    tvToolbarSubtitle.text = activePanelUi.capacity
+
+                    // 动态更新 Undo/Redo 工具按键的可视状态
+                    findViewById<ImageButton>(R.id.btn_action_undo).apply {
+                        isEnabled = state.canUndo
+                        alpha = if (state.canUndo) 1.0f else 0.4f
+                    }
+                    findViewById<ImageButton>(R.id.btn_action_redo).apply {
+                        isEnabled = state.canRedo
+                        alpha = if (state.canRedo) 1.0f else 0.4f
+                    }
+
                     placesAdapter.submit(
                         places = state.places,
                         activePath = activePath
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * 动态应用焦点效果：阴影高度、缩放和明暗对比
+     */
+    private fun applyPanelFocusEffect(panelView: View, isFocused: Boolean) {
+        if (isFocused) {
+            // 1. 激活状态：提升 Z 轴高度产生大阴影 (12dp)
+            panelView.elevation = resources.displayMetrics.density * 12f
+            // 2. 保持 100% 不透明度
+            panelView.alpha = 1.0f
+            // 3. 可选：微弱地放大激活面板 (1.005倍) 增强立体浮起感
+            panelView.scaleX = 1.005f
+            panelView.scaleY = 1.005f
+        } else {
+            // 1. 未激活状态：阴影归零 (贴在底层)
+            panelView.elevation = 0f
+            // 2. 降低透明度 (90%不透明)，实现暗光效果
+            panelView.alpha = 0.9f
+            // 3. 恢复标准缩放
+            panelView.scaleX = 1.0f
+            panelView.scaleY = 1.0f
         }
     }
 
@@ -252,8 +288,12 @@ class FileManagerActivity : AppCompatActivity() {
                         is FileManagerViewModel.Event.OpenEditor ->
                             openEditor(event.file)
 
-                        is FileManagerViewModel.Event.ConfirmOverwrite ->
-                            AlertDialog.Builder(this@FileManagerActivity, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                        is FileManagerViewModel.Event.ConfirmOverwrite -> {
+                            activeConfirmDialog?.dismiss()
+                            activeConfirmDialog = AlertDialog.Builder(
+                                this@FileManagerActivity,
+                                AlertDialog.THEME_DEVICE_DEFAULT_DARK
+                            )
                                 .setTitle("Overwrite confirmation")
                                 .setMessage("${event.src.name} already exists in destination. Overwrite?")
                                 .setPositiveButton("Overwrite") { _, _ ->
@@ -261,9 +301,14 @@ class FileManagerActivity : AppCompatActivity() {
                                 }
                                 .setNegativeButton("Cancel", null)
                                 .show()
+                        }
 
-                        is FileManagerViewModel.Event.ConfirmDelete ->
-                            AlertDialog.Builder(this@FileManagerActivity, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+                        is FileManagerViewModel.Event.ConfirmDelete -> {
+                            activeConfirmDialog?.dismiss()
+                            activeConfirmDialog = AlertDialog.Builder(
+                                this@FileManagerActivity,
+                                AlertDialog.THEME_DEVICE_DEFAULT_DARK
+                            )
                                 .setTitle("Delete")
                                 .setMessage("Delete ${event.file.name}?")
                                 .setPositiveButton("Delete") { _, _ ->
@@ -271,6 +316,7 @@ class FileManagerActivity : AppCompatActivity() {
                                 }
                                 .setNegativeButton("Cancel", null)
                                 .show()
+                        }
 
                         is FileManagerViewModel.Event.PromptRename -> showRenameDialog(event.file)
                         is FileManagerViewModel.Event.PromptNewFile -> showNewNameDialog("New File", "file.txt") {
@@ -288,42 +334,59 @@ class FileManagerActivity : AppCompatActivity() {
     private fun renderPanel(
         views: PanelViews,
         ui: FileManagerViewModel.PanelUi,
-        active: Boolean,
-        isLeft: Boolean
+        panel: FileManagerViewModel.Panel
     ) {
-        val accent = ContextCompat.getColor(this, R.color.fm_accent)
-        val muted = ContextCompat.getColor(this, R.color.fm_text_secondary)
-        val activeBg = ContextCompat.getColor(this, R.color.fm_panel_active)
-        val idleBg = ContextCompat.getColor(this, R.color.fm_surface)
-        val stroke = ContextCompat.getColor(this, R.color.fm_stroke)
-        val density = resources.displayMetrics.density
+        val recyclerView = views.root.findViewById<RecyclerView>(R.id.rv_file_items)
+        val lastPath =
+            if (panel == FileManagerViewModel.Panel.LEFT) lastRenderedLeftPath else lastRenderedRightPath
 
-        views.root.background = GradientDrawable().apply {
-            setColor(if (active) activeBg else idleBg)
-            cornerRadius = 14f * density
-            setStroke(
-                if (active) (1.5f * density).toInt() else 1,
-                if (active) accent else stroke
-            )
-        }
-        views.title.text = when {
-            isLeft && active -> getString(R.string.panel_left_active)
-            isLeft -> getString(R.string.panel_left)
-            active -> getString(R.string.panel_right_active)
-            else -> getString(R.string.panel_right)
-        }
-        views.title.setTextColor(if (active) accent else muted)
-        views.cwdBanner.text = ui.path
-        views.storageCapacity.text = ui.capacity
+        // 关键判断：路径是否真的发生了改变
+        val pathChanged = lastPath != ui.path
 
-        if (views.filter.text.toString() != ui.filter) {
-            suppressFilterCallback = true
-            views.filter.setText(ui.filter)
-            views.filter.setSelection(ui.filter.length)
-            suppressFilterCallback = false
+        // 1. 如果路径改变，将前一个目录的当前滚动位置存入 ViewModel 缓存
+        if (lastPath != null && pathChanged) {
+            saveScrollState(recyclerView, lastPath)
         }
 
-        views.adapter.submit(ui.items)
+        // 更新路径基准记录
+        if (panel == FileManagerViewModel.Panel.LEFT) {
+            lastRenderedLeftPath = ui.path
+        } else {
+            lastRenderedRightPath = ui.path
+        }
+
+        // 2. 根据路径是否改变，决定是否强行还原滚动位置
+        if (pathChanged) {
+            // 场景 A：路径改变了（跳转目录/历史回溯），在渲染完毕后精准恢复目标路径的位置
+            views.adapter.submit(ui.items) {
+                restoreScrollState(recyclerView, ui.path)
+            }
+        } else {
+            // 场景 B：路径完全没变（从后台回到前台、同目录下新建/删除文件、点击选中文件）
+            // 直接提交列表，让 RecyclerView/DiffUtil 自动平滑保持当前的滚动位置，不作任何干预！
+            views.adapter.submit(ui.items)
+        }
+    }
+
+    private fun saveScrollState(recyclerView: RecyclerView, path: String) {
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val position = layoutManager.findFirstVisibleItemPosition()
+        if (position != RecyclerView.NO_POSITION) {
+            val view = layoutManager.findViewByPosition(position)
+            val offset = view?.top ?: 0
+            viewModel.saveScrollPosition(path, position, offset)
+        }
+    }
+
+    private fun restoreScrollState(recyclerView: RecyclerView, path: String) {
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val scrollPos = viewModel.getScrollPosition(path)
+        if (scrollPos != null) {
+            val (position, offset) = scrollPos
+            layoutManager.scrollToPositionWithOffset(position, offset)
+        } else {
+            layoutManager.scrollToPositionWithOffset(0, 0)
+        }
     }
 
     private fun handleStoragePermission(legacyRuntime: Boolean) {
@@ -375,12 +438,13 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showRenameDialog(file: File) {
+        activeConfirmDialog?.dismiss()
         val input = EditText(this).apply {
             setText(file.name)
             setTextColor(Color.WHITE)
             setSelection(file.name.lastIndexOf('.').let { if (it > 0) it else file.name.length })
         }
-        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        activeConfirmDialog = AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
             .setTitle("Rename")
             .setView(input)
             .setPositiveButton("Rename") { _, _ ->
@@ -391,12 +455,13 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showNewNameDialog(title: String, hint: String, onConfirm: (String) -> Unit) {
+        activeConfirmDialog?.dismiss()
         val input = EditText(this).apply {
             this.hint = hint
             setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
         }
-        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        activeConfirmDialog = AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
             .setTitle(title)
             .setView(input)
             .setPositiveButton("Create") { _, _ -> onConfirm(input.text.toString()) }
@@ -430,23 +495,44 @@ class FileManagerActivity : AppCompatActivity() {
                 .create().apply { show() }
     }
 
+    override fun onDestroy() {
+        activeEditorDialog?.dismiss()
+        activeEditorDialog = null
+        activeConfirmDialog?.dismiss()
+        activeConfirmDialog = null
+        super.onDestroy()
+    }
+
     // -------------------------------------------------------------------------
-    // Adapters
+    // Adapters (已全部重构为高性能的 ListAdapter)
     // -------------------------------------------------------------------------
+
+    private class PlaceDiffCallback : DiffUtil.ItemCallback<FileManagerViewModel.QuickPlace>() {
+        override fun areItemsTheSame(
+            oldItem: FileManagerViewModel.QuickPlace,
+            newItem: FileManagerViewModel.QuickPlace
+        ): Boolean {
+            return oldItem.id == newItem.id
+        }
+
+        override fun areContentsTheSame(
+            oldItem: FileManagerViewModel.QuickPlace,
+            newItem: FileManagerViewModel.QuickPlace
+        ): Boolean {
+            return oldItem == newItem
+        }
+    }
 
     private inner class PlacesAdapter(
         private val onClick: (FileManagerViewModel.QuickPlace) -> Unit
-    ) : RecyclerView.Adapter<PlacesAdapter.VH>() {
+    ) : ListAdapter<FileManagerViewModel.QuickPlace, PlacesAdapter.VH>(PlaceDiffCallback()) {
 
-        private val items = mutableListOf<FileManagerViewModel.QuickPlace>()
         private var activePath: String = ""
         private val inflater by lazy { LayoutInflater.from(this@FileManagerActivity) }
 
         fun submit(places: List<FileManagerViewModel.QuickPlace>, activePath: String) {
             this.activePath = activePath
-            items.clear()
-            items.addAll(places)
-            notifyDataSetChanged()
+            submitList(places)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -454,44 +540,60 @@ class FileManagerActivity : AppCompatActivity() {
         }
 
         override fun onBindViewHolder(holder: VH, position: Int) {
-            holder.bind(items[position])
+            holder.bind(getItem(position))
         }
 
-        override fun getItemCount(): Int = items.size
-
         inner class VH(view: View) : RecyclerView.ViewHolder(view) {
-            private val icon: TextView = view.findViewById(R.id.tv_place_icon)
             private val title: TextView = view.findViewById(R.id.tv_place_title)
             private val path: TextView = view.findViewById(R.id.tv_place_path)
 
             fun bind(place: FileManagerViewModel.QuickPlace) {
-                icon.text = place.icon
                 title.text = place.title
                 path.text = place.directory.absolutePath
-                val selected = place.directory.absolutePath == activePath
-                itemView.setBackgroundResource(
-                    if (selected) R.drawable.bg_fm_sidebar_item_active
-                    else R.drawable.bg_fm_sidebar_item
-                )
                 itemView.setOnClickListener { onClick(place) }
             }
         }
     }
 
-    private inner class FileListAdapter(
-        private val panel: FileManagerViewModel.Panel
-    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private class FileItemDiffCallback : DiffUtil.ItemCallback<FileManagerViewModel.ListItem>() {
+        override fun areItemsTheSame(
+            oldItem: FileManagerViewModel.ListItem,
+            newItem: FileManagerViewModel.ListItem
+        ): Boolean {
+            return when (oldItem) {
+                is FileManagerViewModel.ListItem.Parent if newItem is FileManagerViewModel.ListItem.Parent ->
+                    oldItem.parentDir.absolutePath == newItem.parentDir.absolutePath
 
-        private val items = mutableListOf<FileManagerViewModel.ListItem>()
-        private val inflater by lazy { LayoutInflater.from(this@FileManagerActivity) }
+                is FileManagerViewModel.ListItem.Empty if newItem is FileManagerViewModel.ListItem.Empty -> true
+                is FileManagerViewModel.ListItem.Entry if newItem is FileManagerViewModel.ListItem.Entry ->
+                    oldItem.file.absolutePath == newItem.file.absolutePath
 
-        fun submit(newItems: List<FileManagerViewModel.ListItem>) {
-            items.clear()
-            items.addAll(newItems)
-            notifyDataSetChanged()
+                else -> false
+            }
         }
 
-        override fun getItemViewType(position: Int): Int = when (items[position]) {
+        override fun areContentsTheSame(
+            oldItem: FileManagerViewModel.ListItem,
+            newItem: FileManagerViewModel.ListItem
+        ): Boolean {
+            return oldItem == newItem
+        }
+    }
+
+    private inner class FileListAdapter(
+        private val panel: FileManagerViewModel.Panel
+    ) : ListAdapter<FileManagerViewModel.ListItem, RecyclerView.ViewHolder>(FileItemDiffCallback()) {
+
+        private val inflater by lazy { LayoutInflater.from(this@FileManagerActivity) }
+
+        fun submit(
+            newItems: List<FileManagerViewModel.ListItem>,
+            commitCallback: Runnable? = null
+        ) {
+            submitList(newItems, commitCallback)
+        }
+
+        override fun getItemViewType(position: Int): Int = when (getItem(position)) {
             is FileManagerViewModel.ListItem.Parent -> VIEW_TYPE_PARENT
             is FileManagerViewModel.ListItem.Empty -> VIEW_TYPE_EMPTY
             is FileManagerViewModel.ListItem.Entry -> VIEW_TYPE_ENTRY
@@ -506,14 +608,12 @@ class FileManagerActivity : AppCompatActivity() {
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            when (val item = items[position]) {
+            when (val item = getItem(position)) {
                 is FileManagerViewModel.ListItem.Parent -> (holder as ParentVH).bind(item)
                 is FileManagerViewModel.ListItem.Empty -> Unit
                 is FileManagerViewModel.ListItem.Entry -> (holder as EntryVH).bind(item)
             }
         }
-
-        override fun getItemCount(): Int = items.size
 
         private inner class ParentVH(view: View) : RecyclerView.ViewHolder(view) {
             fun bind(item: FileManagerViewModel.ListItem.Parent) {
@@ -524,25 +624,37 @@ class FileManagerActivity : AppCompatActivity() {
         private inner class EmptyVH(view: View) : RecyclerView.ViewHolder(view)
 
         private inner class EntryVH(view: View) : RecyclerView.ViewHolder(view) {
-            private val iconView: TextView = view.findViewById(R.id.tv_item_icon)
+            private val iconView: ImageView = view.findViewById(R.id.iv_item_icon)
             private val nameView: TextView = view.findViewById(R.id.tv_item_name)
             private val detailView: TextView = view.findViewById(R.id.tv_item_detail)
-            private val menuView: TextView = view.findViewById(R.id.tv_item_menu)
 
             fun bind(item: FileManagerViewModel.ListItem.Entry) {
                 val file = item.file
-                iconView.text = item.icon
+
+                // 1. 设置前端图标
+                if (item.isFolder) {
+                    iconView.setImageResource(R.drawable.baseline_folder_24)
+                } else {
+                    iconView.setImageResource(R.drawable.baseline_file_24)
+                }
+
+                // 2. 使用 backgroundTintList 动态改变背景色，彻底免疫复用 Bug
+                val bgColor = if (item.isFolder) {
+                    Color.parseColor("#151515") // 文件夹黑色
+                } else {
+                    Color.parseColor("#4A5568") // 文件冷灰色
+                }
+                iconView.backgroundTintList = android.content.res.ColorStateList.valueOf(bgColor)
+
                 nameView.text = file.name
                 detailView.text = item.detail
-                itemView.setBackgroundResource(
-                    if (item.selected) R.drawable.bg_fm_item_selected else R.drawable.bg_fm_item
-                )
+
+                itemView.isSelected = item.selected
                 itemView.setOnClickListener { viewModel.onEntryClick(panel, file) }
                 itemView.setOnLongClickListener {
                     showFileMenu(panel, file)
                     true
                 }
-                menuView.setOnClickListener { showFileMenu(panel, file) }
             }
         }
     }
@@ -554,7 +666,8 @@ class FileManagerActivity : AppCompatActivity() {
         } else {
             arrayOf("Edit", "Rename", "Delete")
         }
-        AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        activeConfirmDialog?.dismiss()
+        activeConfirmDialog = AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
             .setTitle(file.name)
             .setItems(options) { _, which ->
                 val adjusted = if (file.isDirectory) which + 1 else which
@@ -571,21 +684,6 @@ class FileManagerActivity : AppCompatActivity() {
                 }
             }
             .show()
-    }
-
-    override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START)
-        } else {
-            @Suppress("DEPRECATION")
-            super.onBackPressed()
-        }
-    }
-
-    override fun onDestroy() {
-        activeEditorDialog?.dismiss()
-        activeEditorDialog = null
-        super.onDestroy()
     }
 
     companion object {
